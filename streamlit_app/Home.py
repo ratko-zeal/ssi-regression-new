@@ -31,12 +31,8 @@ def domain_cols(df):
 def domain_name(col):
     return col.replace("DOMAIN_SCORE__","")
 
-def percentile_cutoffs(series):
-    return np.nanpercentile(series, [15, 50])  # to display in sidebar if needed
-
 def maturity_from_percent_ranks(n: int):
     """Return (mature_end_idx, advancing_end_idx) for 15% / 35% scheme."""
-    # first 15% mature; next 35% advancing; rest nascent
     m_end = max(1, int(np.ceil(0.15 * n)))
     a_end = max(m_end, int(np.ceil(0.50 * n)))  # 15% + 35% = 50%
     return m_end, a_end
@@ -73,6 +69,16 @@ if COUNTRY is None:
     st.error("`final_scores.csv` must include a `Country` column.")
     st.stop()
 
+# Choose score column automatically (no sidebar selector anymore)
+score_candidates = [
+    "Final_Score_0_100", "Final_Blended_0_100", "Final_Log_0_100",
+    "Final_PerCap_0_100", "Final_DomainAvg_0_100"
+]
+score_to_show = next((c for c in score_candidates if c in final_df.columns), None)
+if score_to_show is None:
+    st.error("No final score columns found (e.g., `Final_Score_0_100`).")
+    st.stop()
+
 # Attach regions
 REGION = None
 if reg_df is not None:
@@ -84,21 +90,8 @@ if reg_df is not None:
             final_df.drop(columns=[c_reg], inplace=True)
         REGION = r_reg
 
-# Score variants
-score_variants = [c for c in [
-    "Final_Score_0_100",
-    "Final_Blended_0_100",
-    "Final_Log_0_100",
-    "Final_PerCap_0_100",
-    "Final_DomainAvg_0_100"
-] if c in final_df.columns]
-if not score_variants:
-    st.error("No final score columns found (e.g., `Final_Score_0_100`).")
-    st.stop()
-
 # ---------------- Sidebar (regions only + Global) ----------------
 st.sidebar.header("Regions")
-
 regions_list = sorted(final_df[REGION].dropna().unique().tolist()) if REGION else []
 default_regions = regions_list[:]  # preselect all when Global is off
 
@@ -107,13 +100,6 @@ if REGION and not global_on:
     selected_regions = st.sidebar.multiselect("Select Regions", regions_list, default=default_regions)
 else:
     selected_regions = regions_list  # ignored if global_on True
-
-# Choose which final score to visualize (keep here for convenience)
-score_to_show = st.sidebar.selectbox(
-    "Score to visualize",
-    score_variants,
-    index=(score_variants.index("Final_Score_0_100") if "Final_Score_0_100" in score_variants else 0)
-)
 
 # Apply region filter if Global is OFF
 if REGION and not global_on:
@@ -132,37 +118,32 @@ n = len(rank)
 if n == 0:
     st.info("No countries to display. Adjust filters.")
 else:
-    # Percentile group sizes
     m_end, a_end = maturity_from_percent_ranks(n)
-    # Build bar
+
     fig = px.bar(rank, x=COUNTRY, y=score_to_show)
 
-    # Background bands using paper coordinates (aligns well because bars are evenly spaced)
+    # Background bands (paper coords)
     fig.add_vrect(x0=0.0, x1=(m_end / n), xref="paper", fillcolor="#ffb896", opacity=0.35, line_width=0, layer="below")
     fig.add_vrect(x0=(m_end / n), x1=(a_end / n), xref="paper", fillcolor="#abd7f9", opacity=0.35, line_width=0, layer="below")
     fig.add_vrect(x0=(a_end / n), x1=1.0, xref="paper", fillcolor="#81c3f6", opacity=0.35, line_width=0, layer="below")
 
     # Titles for bands
-    fig.add_annotation(x=(0.5 * m_end / n), y=rank[score_to_show].max() * 1.03,
-                       text="<b>Mature</b>", showarrow=False)
-    fig.add_annotation(x=((m_end + a_end) / 2 / n), y=rank[score_to_show].max() * 1.03,
-                       text="<b>Advancing</b>", showarrow=False)
-    fig.add_annotation(x=((a_end + n) / 2 / n), y=rank[score_to_show].max() * 1.03,
-                       text="<b>Nascent</b>", showarrow=False)
+    ymax = rank[score_to_show].max()
+    fig.add_annotation(x=(0.5 * m_end / n), y=ymax * 1.03, text="<b>Mature</b>", showarrow=False)
+    fig.add_annotation(x=((m_end + a_end) / 2 / n), y=ymax * 1.03, text="<b>Advancing</b>", showarrow=False)
+    fig.add_annotation(x=((a_end + n) / 2 / n), y=ymax * 1.03, text="<b>Nascent</b>", showarrow=False)
 
-    fig.update_layout(
-        xaxis_title=None, yaxis_title=score_to_show.replace("_", " "),
-        margin=dict(l=0, r=0, t=10, b=0)
-    )
+    fig.update_layout(xaxis_title=None, yaxis_title=score_to_show.replace("_"," "),
+                      margin=dict(l=0, r=0, t=10, b=0))
     fig.update_xaxes(tickangle=-75)
     st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
-# ---------------- GRAPH 2: Bubble chart (High Growth Companies vs Score) ----------------
+# ---------------- GRAPH 2: Bubble chart (HG vs Score) with grouping/guides ----------------
 st.subheader("High Growth Companies Against Score")
 
-# Try to find HG column in final first, else in input
+# Find HG column
 hg_col_final = try_find_hg_col(final_df)
 hg_col_input = try_find_hg_col(input_df)
 hg_source = "final" if hg_col_final else ("input" if hg_col_input else None)
@@ -174,7 +155,6 @@ else:
         bubble_df = df[[COUNTRY, score_to_show, hg_col_final]].dropna()
         hg_col = hg_col_final
     else:
-        # merge input raw counts
         merged = df.merge(input_df[[pick_col(input_df, "country"), hg_col_input]],
                           left_on=COUNTRY, right_on=pick_col(input_df, "country"), how="left")
         if pick_col(input_df, "country") != COUNTRY:
@@ -185,13 +165,34 @@ else:
     if len(bubble_df) == 0:
         st.info("Not enough data to draw the bubble chart with the selected filters.")
     else:
+        # Color by maturity buckets computed on the shown data (15/35/50)
+        rank2 = bubble_df[[COUNTRY, score_to_show]].sort_values(score_to_show, ascending=False).reset_index(drop=True)
+        n2 = len(rank2)
+        m_end2, a_end2 = maturity_from_percent_ranks(n2)
+        # build mapping country -> maturity
+        rank2["Maturity"] = ["Mature"]*m_end2 + ["Advancing"]*(a_end2-m_end2) + ["Nascent"]*(n2-a_end2)
+        bubble_df = bubble_df.merge(rank2[[COUNTRY, "Maturity"]], on=COUNTRY, how="left")
+
+        show_guides = st.checkbox("Show grouping guides", value=True)
+
         fig_sc = px.scatter(
             bubble_df,
-            x=score_to_show, y=hg_col, size=hg_col, hover_name=COUNTRY,
-            log_y=True, size_max=60,
+            x=score_to_show, y=hg_col, size=hg_col, color="Maturity",
+            color_discrete_map={"Mature":"#ffb896","Advancing":"#abd7f9","Nascent":"#81c3f6"},
+            hover_name=COUNTRY, log_y=True, size_max=60,
             labels={score_to_show: "SS Index", hg_col: "High Growth Companies"}
         )
-        fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+
+        if show_guides:
+            # Horizontal dashed lines at common count tiers
+            for yv in [3, 10, 100, 1000]:
+                fig_sc.add_hline(y=yv, line=dict(color="#699bc6", width=1, dash="dash"))
+            # Vertical dashed lines at score thresholds (50 and 75)
+            for xv in [50, 75]:
+                if bubble_df[score_to_show].min() <= xv <= bubble_df[score_to_show].max():
+                    fig_sc.add_vline(x=xv, line=dict(color="#699bc6", width=1, dash="dash"))
+
+        fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="",)
         st.plotly_chart(fig_sc, use_container_width=True)
 
 st.divider()
@@ -203,20 +204,19 @@ dom_cols = domain_cols(final_df)
 if not dom_cols:
     st.info("No `DOMAIN_SCORE__*` columns found in `final_scores.csv`.")
 else:
-    # Country picker inside the section (up to 5)
-    selected_countries = st.multiselect(
+    sel_countries = st.multiselect(
         "Pick up to 5 countries",
         sorted(df[COUNTRY].unique().tolist()),
         default=[],
         max_selections=5
     )
 
-    if not selected_countries:
+    if not sel_countries:
         st.caption("Select countries above to view the radar.")
     else:
         r_labels = [domain_name(c) for c in dom_cols]
         radar = go.Figure()
-        for ctry in selected_countries:
+        for ctry in sel_countries:
             vals = df.loc[df[COUNTRY] == ctry, dom_cols]
             if vals.empty:
                 continue
@@ -234,21 +234,19 @@ st.divider()
 # ---------------- DOMAIN BREAKDOWN: Tabs with up to 3 indicators per domain ----------------
 st.subheader("Domain Deep-dive (Indicators by Domain)")
 
+dom_map = load_csv(DOMAINS_MAP_PATH)  # reload to ensure availability at runtime
 if dom_map is None or pick_col(dom_map, "indicator") is None or pick_col(dom_map, "domain") is None:
     st.info("Add `domains.csv` (columns: `INDICATOR`, `DOMAIN`) to enable this section.")
 else:
     ind_map_indicator = pick_col(dom_map, "indicator")
     ind_map_domain    = pick_col(dom_map, "domain")
-    # Only keep indicators present in indicator_scores
+
     icountry = pick_col(ind_df, "country")
     work = ind_df.copy()
     if icountry and icountry != COUNTRY:
         work = work.rename(columns={icountry: COUNTRY})
-    # Merge region filter
     work = work.merge(df[[COUNTRY]], on=COUNTRY, how="inner")
 
-    # Build domain->indicators dict
-    # Keep only indicators present in work columns
     available_inds = set([c for c in work.columns if c != COUNTRY])
     dom_map_use = dom_map[[ind_map_indicator, ind_map_domain]].copy()
     dom_map_use[ind_map_indicator] = dom_map_use[ind_map_indicator].astype(str)
@@ -261,12 +259,10 @@ else:
         with tabs[0]:
             st.info("No domain/indicator mapping matches your indicator file.")
     else:
-        # If no radar selection above, the section should still allow country selection
-        default_countries = selected_countries if 'selected_countries' in locals() and selected_countries else []
         chosen_countries = st.multiselect(
             "Select countries for domain bars (up to 5)",
             sorted(df[COUNTRY].unique().tolist()),
-            default=default_countries[:5],
+            default=[],
             max_selections=5,
             key="dom_bar_countries"
         )
@@ -290,12 +286,9 @@ else:
                     st.caption("Select up to 3 indicators and at least one country.")
                     continue
 
-                # Prepare data for bars
                 plot_df = work[work[COUNTRY].isin(chosen_countries)][[COUNTRY] + chosen_inds].copy()
-                # melt
                 melt_df = plot_df.melt(id_vars=[COUNTRY], value_vars=chosen_inds,
                                        var_name="Indicator", value_name="Score")
-                # order countries by total score on selected indicators
                 order = (melt_df.groupby(COUNTRY)["Score"].sum().sort_values(ascending=False).index.tolist())
                 fig_bars = px.bar(
                     melt_df, y=COUNTRY, x="Score", color=COUNTRY,
@@ -314,7 +307,7 @@ else:
 # ---------------- Footer ----------------
 with st.expander("About"):
     st.markdown(f"""
-**Score shown:** `{score_to_show}`  
+**Score shown:** `{score_to_show}` (auto-selected).  
 **Maturity bands:** top 15% = Mature, next 35% = Advancing, rest = Nascent.  
 **Files used**  
 - `final_scores.csv` — Final score variants (0–100) and per-domain `DOMAIN_SCORE__*`.  
