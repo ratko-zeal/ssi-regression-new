@@ -1,5 +1,7 @@
 model_target,indicator_weights_csv,domain_weights_csv,scores_csv
-ridge_HG_Normalized,outputs/ridge/HG_Normalized/indicator_weights.csv,outputs/ridge/HG_Normalized/domain_weights.csv,outputs/ridge/HG_Normalized/scores.csv
-enet_HG_Normalized,outputs/enet/HG_Normalized/indicator_weights.csv,outputs/enet/HG_Normalized/domain_weights.csv,outputs/enet/HG_Normalized/scores.csv
+ridge_HG_log_raw,outputs/ridge/HG_log_raw/indicator_weights.csv,outputs/ridge/HG_log_raw/domain_weights.csv,outputs/ridge/HG_log_raw/scores.csv
+enet_HG_log_raw,outputs/enet/HG_log_raw/indicator_weights.csv,outputs/enet/HG_log_raw/domain_weights.csv,outputs/enet/HG_log_raw/scores.csv
 ridge_HG_per_100k,outputs/ridge/HG_per_100k/indicator_weights.csv,outputs/ridge/HG_per_100k/domain_weights.csv,outputs/ridge/HG_per_100k/scores.csv
 enet_HG_per_100k,outputs/enet/HG_per_100k/indicator_weights.csv,outputs/enet/HG_per_100k/domain_weights.csv,outputs/enet/HG_per_100k/scores.csv
+ridge_HG_Normalized,outputs/ridge/HG_Normalized/indicator_weights.csv,outputs/ridge/HG_Normalized/domain_weights.csv,outputs/ridge/HG_Normalized/scores.csv
+enet_HG_Normalized,outputs/enet/HG_Normalized/indicator_weights.csv,outputs/enet/HG_Normalized/domain_weights.csv,outputs/enet/HG_Normalized/scores.csv

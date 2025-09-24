@@ -64,6 +64,7 @@ def build_feature_matrix(domains: pd.DataFrame, scores: pd.DataFrame) -> pd.Data
     return X
 
 def make_targets(scores: pd.DataFrame, id_cols: List[str]) -> pd.DataFrame:
+    """Create HG_per_100k and HG_log_raw targets alongside existing columns."""
     # POPULATION numeric
     pop_col = None
     for c in id_cols:
@@ -76,9 +77,9 @@ def make_targets(scores: pd.DataFrame, id_cols: List[str]) -> pd.DataFrame:
                .replace({"": np.nan})
                .astype(float))
     else:
-        pop = pd.Series(np.nan, index=scores.index)
+        pop = pd.Series(np.nan, index=scores.index, name="POPULATION_num")
 
-    # per 100k
+    # per 100k (keep for comparison)
     if TGT_RAW in scores.columns:
         hg_per_100k = np.where(
             (scores[TGT_RAW].notna()) & (pop > 0),
@@ -86,8 +87,12 @@ def make_targets(scores: pd.DataFrame, id_cols: List[str]) -> pd.DataFrame:
             np.nan,
         )
         scores["HG_per_100k"] = hg_per_100k
+        # NEW: log target
+        scores["HG_log_raw"]  = np.log1p(scores[TGT_RAW].astype(float))
     else:
         scores["HG_per_100k"] = np.nan
+        scores["HG_log_raw"]  = np.nan
+
     return scores
 
 # --------- MODEL PREP & FIT ---------
@@ -149,48 +154,43 @@ def extract_weights(model, kept_cols: List[str], std: pd.Series, domain_map: Dic
     return w[["INDICATOR","DOMAIN","coef_std","coef_original_scale",
               "weight_indicator","weight_indicator_norm"]], dom_w
 
-def score_all_rows(model, X_all, kept_cols, mu, std, med, ids_df, prefix, outdir):
-    """Standardize ALL rows using training stats, predict, and write per-country index 0–100."""
-    X_num = X_all[kept_cols].apply(pd.to_numeric, errors="coerce")
-    X_imp = X_num.fillna(med[kept_cols])
-    Xz    = (X_imp - mu[kept_cols]) / std[kept_cols]
-
-    preds = pd.Series(model.predict(Xz), index=Xz.index)
-
-    # normalize predictions to 0–100
-    lo, hi = preds.min(), preds.max()
-    idx = pd.Series(0.0, index=preds.index) if (pd.isna(lo) or pd.isna(hi) or hi == lo) else (preds - lo) / (hi - lo) * 100
-
-    out = ids_df.copy() if ids_df is not None else pd.DataFrame(index=Xz.index)
-    out[f"{prefix}_model_pred"]  = preds
-    out[f"{prefix}_index_0_100"] = idx
-
-    out_path = out_paths(*prefix.split("_", 1))[ "scores" ] if "_" in prefix else os.path.join(outdir, f"{prefix}_scores.csv")
-    # The above is not used—paths are handled by caller. Keep 'out' returned to caller instead:
-    return out, idx
-
-# --------- FINAL OUTPUTS (requested) ---------
 def minmax_0_100(series: pd.Series) -> pd.Series:
     lo, hi = series.min(), series.max()
     if pd.isna(lo) or pd.isna(hi) or hi == lo:
         return pd.Series(0.0, index=series.index)
     return (series - lo) / (hi - lo) * 100.0
 
+def score_and_save(model, X_all, kept, mu, std, med, ids_df, mname, tname):
+    """Standardize ALL rows using training stats, predict, and write per-country index 0–100."""
+    paths = out_paths(mname, tname)
+
+    X_num = X_all[kept].apply(pd.to_numeric, errors="coerce")
+    X_imp = X_num.fillna(med[kept])
+    X_all_std = (X_imp - mu[kept]) / std[kept]
+
+    preds_all = pd.Series(model.predict(X_all_std), index=X_all_std.index)
+    idx_all   = minmax_0_100(preds_all)
+
+    out_scores = ids_df.copy() if ids_df is not None else pd.DataFrame(index=X_all_std.index)
+    out_scores[f"{mname}_{tname}_model_pred"]  = preds_all
+    out_scores[f"{mname}_{tname}_index_0_100"] = idx_all
+    out_scores.to_csv(paths["scores"], index=False)
+
+    return paths
+
+# --------- FINAL OUTPUTS (requested) ---------
 def build_unweighted_domain_scores(domains: pd.DataFrame, X_all: pd.DataFrame) -> pd.DataFrame:
     """Unweighted domain scores: mean of domain indicators per country, min-max to 0–100 across countries."""
-    # Align to indicators present in X_all
     dmap = domains[domains["INDICATOR"].isin(X_all.columns)].copy()
     if dmap.empty:
         return pd.DataFrame(index=X_all.index)
 
-    # For each domain, compute mean of its indicators
     out = pd.DataFrame(index=X_all.index)
     for d in sorted(dmap["DOMAIN"].dropna().unique().tolist()):
         cols = dmap.loc[dmap["DOMAIN"] == d, "INDICATOR"].unique().tolist()
         cols = [c for c in cols if c in X_all.columns]
         if not cols:
             continue
-        # Mean across available indicators per row (ignore NaNs)
         raw = X_all[cols].astype(float)
         dom_mean = raw.mean(axis=1, skipna=True)
         out[f"DOMAIN_SCORE__{d}"] = minmax_0_100(dom_mean)
@@ -202,6 +202,12 @@ def build_indicator_scores_0_100(X_all: pd.DataFrame) -> pd.DataFrame:
     for col in X_all.columns:
         df[col] = minmax_0_100(pd.to_numeric(X_all[col], errors="coerce"))
     return df
+
+def pick_country_col(df: pd.DataFrame):
+    for c in df.columns:
+        if c.lower() == "country":
+            return c
+    return None
 
 # --------- MAIN ---------
 def main():
@@ -220,12 +226,14 @@ def main():
     # Domain map for weights
     domain_map = domains.set_index("INDICATOR")["DOMAIN"].to_dict()
 
-    # Targets to run
+    # Targets to run (PRIMARY first: HG_log_raw)
     targets = {}
-    if TGT_NORM in scores.columns:
-        targets["HG_Normalized"] = scores[TGT_NORM]
+    if "HG_log_raw" in scores.columns and scores["HG_log_raw"].notna().any():
+        targets["HG_log_raw"] = scores["HG_log_raw"]
     if "HG_per_100k" in scores.columns:
         targets["HG_per_100k"] = scores["HG_per_100k"]
+    if TGT_NORM in scores.columns:
+        targets["HG_Normalized"] = scores[TGT_NORM]
 
     manifest_rows = []
     metrics_rows  = []
@@ -257,25 +265,13 @@ def main():
             # weights
             ind_w, dom_w = extract_weights(model, kept, std, domain_map)
 
-            # save weights
+            # save weights and scores
             paths = out_paths(mname, tname)
             ind_w.to_csv(paths["ind"], index=False)
             dom_w.to_csv(paths["dom"], index=False)
+            score_and_save(model, X_all, kept, mu, std, med, ids_df, mname, tname)
 
-            # country predictions & index
-            # (We need a standardized matrix for ALL rows with train stats)
-            X_num = X_all[kept].apply(pd.to_numeric, errors="coerce")
-            X_imp = X_num.fillna(med[kept])
-            X_all_std = (X_imp - mu[kept]) / std[kept]
-            preds_all = pd.Series(model.predict(X_all_std), index=X_all_std.index)
-            idx_all   = minmax_0_100(preds_all)
-
-            out_scores = ids_df.copy() if ids_df is not None else pd.DataFrame(index=X_all_std.index)
-            out_scores[f"{mname}_{tname}_model_pred"]  = preds_all
-            out_scores[f"{mname}_{tname}_index_0_100"] = idx_all
-            out_scores.to_csv(paths["scores"], index=False)
-
-            # record manifest & metrics
+            # manifest & metrics
             manifest_rows.append(dict(
                 model_target=f"{mname}_{tname}",
                 indicator_weights_csv=paths["ind"],
@@ -295,26 +291,30 @@ def main():
     # 2) Indicator scores (0–100 per indicator, per country)
     indicator_scores = build_indicator_scores_0_100(X_all)
 
-    # 3) Final_Score_0_100: use RIDGE HG_per_100k index (dense weights; no forced zeros)
-    ridge_hg_path = os.path.join(OUTDIR_ROOT, "ridge", "HG_per_100k", "scores.csv")
-    if not os.path.exists(ridge_hg_path):
-        # fallback: ENet HG_per_100k if ridge not available
-        enet_hg_path = os.path.join(OUTDIR_ROOT, "enet", "HG_per_100k", "scores.csv")
-        if os.path.exists(enet_hg_path):
-            ridge_hg_path = enet_hg_path
-        else:
-            raise RuntimeError("No HG_per_100k scores found for ridge or enet; cannot build final_scores.csv.")
+    # 3) Final_Score_0_100: use RIDGE HG_log_raw index (dense weights; no forced zeros)
+    preferred = [
+        ("ridge", "HG_log_raw"),      # primary
+        ("ridge", "HG_per_100k"),     # fallback 1
+        ("ridge", "HG_Normalized"),   # fallback 2
+        ("enet",  "HG_log_raw"),      # fallback 3
+        ("enet",  "HG_per_100k"),     # fallback 4
+        ("enet",  "HG_Normalized"),   # fallback 5
+    ]
 
-    model_scores = pd.read_csv(ridge_hg_path)
+    selected_scores_path = None
+    for model, target in preferred:
+        cand = os.path.join(OUTDIR_ROOT, model, target, "scores.csv")
+        if os.path.exists(cand):
+            selected_scores_path = cand
+            break
+
+    if selected_scores_path is None:
+        raise RuntimeError("No model scores found to build final_scores.csv.")
+
+    model_scores = pd.read_csv(selected_scores_path)
+
     # case-insensitive country join
-    def pick_country_col(df: pd.DataFrame):
-        for c in df.columns:
-            if c.lower() == "country":
-                return c
-        return None
-
     c1 = pick_country_col(model_scores)
-    # If no country col in model_scores (unlikely), just attach by row order.
     if c1 is None and detect_id_cols(scores):
         c1 = detect_id_cols(scores)[0]
 
@@ -326,12 +326,12 @@ def main():
             unweighted_domain = unweighted_domain.copy()
             unweighted_domain[orig_country_col] = scores[orig_country_col]
 
-    # Merge domain scores with model Final index (use Ridge HG_per_100k 0–100)
     final_df = unweighted_domain.copy()
-    # bring in model index
+
+    # bring in model index column (0–100)
     idx_cols = [c for c in model_scores.columns if c.endswith("_index_0_100")]
     if not idx_cols:
-        raise RuntimeError("Did not find model index column in HG_per_100k scores.")
+        raise RuntimeError("Did not find model index column in selected scores.")
     idx_col = idx_cols[0]
 
     if pick_country_col(final_df) and c1:
