@@ -141,7 +141,6 @@ else:
 st.divider()
 
 # ---------------- GRAPH 2: Bubble chart (HG vs Score) with grouping/guides ----------------
-# ---------------- GRAPH 2: Bubble chart (HG vs Score) with grouping/guides + log options ----------------
 st.subheader("High Growth Companies Against Score")
 
 # Find HG column
@@ -166,47 +165,65 @@ else:
     if len(bubble_df) == 0:
         st.info("Not enough data to draw the bubble chart with the selected filters.")
     else:
-        # Compute maturity buckets on the shown data (15% / 35% / 50%)
+        # Color by maturity buckets computed on the shown data (15/35/50)
         rank2 = bubble_df[[COUNTRY, score_to_show]].sort_values(score_to_show, ascending=False).reset_index(drop=True)
         n2 = len(rank2)
         m_end2, a_end2 = maturity_from_percent_ranks(n2)
         rank2["Maturity"] = ["Mature"]*m_end2 + ["Advancing"]*(a_end2-m_end2) + ["Nascent"]*(n2-a_end2)
         bubble_df = bubble_df.merge(rank2[[COUNTRY, "Maturity"]], on=COUNTRY, how="left")
 
-        # sqrt bubble sizes → less dominance
+        # ---- NEW: scaling options ----
+        scale_mode = st.radio(
+            "Scale",
+            ["Log X & Log Y (compact)", "Log Y only", "Linear"],
+            index=0,
+            horizontal=True,
+            key="bubble_scale_mode"
+        )
+
+        # sqrt bubble sizes → less dominance at the very top
         bubble_df["_size"] = np.sqrt(np.maximum(bubble_df[hg_col].values, 1.0))
 
-        # tiny epsilon to avoid log(0) in x
+        # avoid zeros on log-x by adding a tiny epsilon (for plotting only)
         eps = 0.1
         bubble_df["_x"] = bubble_df[score_to_show].astype(float) + eps
 
+        # draw
         fig_sc = px.scatter(
             bubble_df,
-            x="_x", y=hg_col, size="_size", color="Maturity",
+            x="_x" if scale_mode != "Linear" else score_to_show,
+            y=hg_col,
+            size="_size",
+            color="Maturity",
             color_discrete_map={"Mature":"#ffb896","Advancing":"#abd7f9","Nascent":"#81c3f6"},
-            hover_name=COUNTRY, size_max=60,
-            labels={"_x": "SS Index", hg_col: "High Growth Companies"}
+            hover_name=COUNTRY,
+            size_max=60,
+            labels={score_to_show: "SS Index", "_x": "SS Index", hg_col: "High Growth Companies"}
         )
 
-        # Always log-log
-        fig_sc.update_xaxes(type="log")
-        fig_sc.update_yaxes(type="log")
+        # set axis scales
+        if scale_mode == "Log X & Log Y (compact)":
+            fig_sc.update_xaxes(type="log")
+            fig_sc.update_yaxes(type="log")
+        elif scale_mode == "Log Y only":
+            fig_sc.update_yaxes(type="log")
 
-        # Background maturity bands (vertical, by 15/35/50 split) — align in paper coords
-        # Determine band edges in displayed order:
-        # sort for plotting positions
-        disp_rank = bubble_df[[COUNTRY, "_x"]].sort_values("_x", ascending=False).reset_index(drop=True)
-        # We only need counts; vrect will use paper coords
-        fig_sc.add_vrect(x0=0.0, x1=(m_end2 / n2), xref="paper", fillcolor="#ffb896", opacity=0.18, line_width=0, layer="below")
-        fig_sc.add_vrect(x0=(m_end2 / n2), x1=(a_end2 / n2), xref="paper", fillcolor="#abd7f9", opacity=0.18, line_width=0, layer="below")
-        fig_sc.add_vrect(x0=(a_end2 / n2), x1=1.0, xref="paper", fillcolor="#81c3f6", opacity=0.18, line_width=0, layer="below")
+        # optional guides
+        show_guides = st.checkbox("Show grouping guides", value=True)
+        if show_guides:
+            # Horizontal dashed lines at common tiers
+            for yv in [3, 10, 100, 1000]:
+                fig_sc.add_hline(y=yv, line=dict(color="#699bc6", width=1, dash="dash"))
+            # Vertical dashed lines at score thresholds (50, 75)
+            for xv in [50, 75]:
+                x_plot = xv + (eps if scale_mode != "Linear" else 0)
+                if bubble_df["_x" if scale_mode != "Linear" else score_to_show].between(
+                    bubble_df["_x" if scale_mode != "Linear" else score_to_show].min(),
+                    bubble_df["_x" if scale_mode != "Linear" else score_to_show].max()
+                ).any():
+                    fig_sc.add_vline(x=x_plot, line=dict(color="#699bc6", width=1, dash="dash"))
 
-        # Optional dashed guides (kept from your example)
-        for yv in [3, 10, 100, 1000]:
-            fig_sc.add_hline(y=yv, line=dict(color="#699bc6", width=1, dash="dash"))
-        for xv in [50, 75]:
-            fig_sc.add_vline(x=xv + eps, line=dict(color="#699bc6", width=1, dash="dash"))
-
+        # tidy
         fig_sc.update_traces(marker_line_width=0)
         fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="")
         st.plotly_chart(fig_sc, use_container_width=True)
