@@ -1,9 +1,9 @@
 INDICATOR,DOMAIN,coef_std,coef_original_scale,weight_indicator,weight_indicator_norm
-% of Startups Exiting via Acquisition or IPO,Culture,-0.0,-0.0,-0.0,-0.0
-Availability of Alternative Finance,Finance,0.3603534260278217,0.025887432773709446,0.025887432773709446,0.09749197866993434
-"Availability of tech services (fintech services, crypto)",Supports,0.0,0.0,0.0,0.0
-Corporate tax rate,Policy,0.3544153825840436,0.01608551882807034,0.01608551882807034,0.060578006022817765
-Corruption index / Rule of law,Policy,0.0,0.0,0.0,0.0
+% of Startups Exiting via Acquisition or IPO,Culture,0.0,0.0,0.0,0.0
+Availability of Alternative Finance,Finance,0.27376123400537133,0.020012320155333246,0.020012320155333246,0.08038040508247814
+"Availability of tech services (fintech services, crypto)",Supports,-0.0,-0.0,-0.0,-0.0
+Corporate tax rate,Policy,0.4099373897873585,0.018605444136417803,0.018605444136417803,0.07472962279319369
+Corruption index / Rule of law,Policy,0.19052447201571288,0.006981689066553233,0.006981689066553233,0.0280422755069657
 "Cost of Internet (60 Mbps or more, unlimited data cable/adsl) utlities monthly in USD",Supports,0.0,0.0,0.0,0.0
 Cost of internet per month/USD,Supports,0.0,0.0,0.0,0.0
 Diversity and Inclusion Index-wage inequality,Human Capital,-0.0,-0.0,-0.0,-0.0
@@ -22,7 +22,7 @@ Financial Literacy,Human Capital,0.0,0.0,0.0,0.0
 Financial market development Index,Finance,-0.0,-0.0,-0.0,-0.0
 Global Innovation Index,Culture,0.0,0.0,0.0,0.0
 Government R&D Expenditure % GDP,Policy,0.0,0.0,0.0,0.0
-Government effectiveness,Policy,0.6488901267882377,0.024060474843359797,0.024060474843359797,0.09061166167854064
+Government effectiveness,Policy,0.6063557285636112,0.022529088049771644,0.022529088049771644,0.09048911917876057
 Growth Rates in Biotech,Markets,-0.0,-0.0,-0.0,-0.0
 Growth Rates in Cleantech,Markets,-0.0,-0.0,-0.0,-0.0
 Growth Rates in Fintech,Markets,-0.0,-0.0,-0.0,-0.0
@@ -37,30 +37,30 @@ Number of Accelerators,Supports,-0.0,-0.0,-0.0,-0.0
 Number of Corporate Venture Capital (CVC) Funds investing in local Startups,Markets,-0.0,-0.0,-0.0,-0.0
 Number of IPOs in the Last 5 Years,Finance,-0.0,-0.0,-0.0,-0.0
 Number of Investors/VCs,Finance,0.0,0.0,0.0,0.0
-Number of STEM graduates,Human Capital,0.0,0.0,0.0,0.0
-Number of VC investors older than 5 years,Finance,-0.0,-0.0,-0.0,-0.0
-Number of contributions by top 1000 GitHub users,Human Capital,-0.17634238804574204,-0.009010456184746113,-0.009010456184746113,-0.03393334556765213
-Number of coworking spaces,Supports,-0.0,-0.0,-0.0,-0.0
+Number of STEM graduates,Human Capital,-0.0,-0.0,-0.0,-0.0
+Number of VC investors older than 5 years,Finance,0.0,0.0,0.0,0.0
+Number of contributions by top 1000 GitHub users,Human Capital,-0.0,-0.0,-0.0,-0.0
+Number of coworking spaces,Supports,-0.11255001584503632,-0.03398963302069717,-0.03398963302069717,-0.13652092558994536
 Number of cumulative unicorns,Culture,-0.0,-0.0,-0.0,-0.0
 Number of exits above 1B,Culture,-0.0,-0.0,-0.0,-0.0
 Number of exits above 50M,Culture,-0.0,-0.0,-0.0,-0.0
 Number of global startup events,Supports,-0.0,-0.0,-0.0,-0.0
 Number of incubators,Supports,-0.0,-0.0,-0.0,-0.0
-Number of research institutes,Supports,-0.046889000337959945,-0.004049510310250492,-0.004049510310250492,-0.015250441256251671
+Number of research institutes,Supports,-0.031098960735805294,-0.0030777134487702347,-0.0030777134487702347,-0.012361777735902047
 Perceived opportunities rate,Culture,0.0,0.0,0.0,0.0
-Percentage of Startups Securing Series A or Beyond,Finance,-0.0,-0.0,-0.0,-0.0
+Percentage of Startups Securing Series A or Beyond,Finance,0.0,0.0,0.0,0.0
 Percentage of enrollment in secondary education,Human Capital,-0.0,-0.0,-0.0,-0.0
 Political transformation index,Policy,-0.0,-0.0,-0.0,-0.0
-Presence of international influencers (like Tim Cook),Markets,-0.42785335394072477,-0.029996534572968036,-0.029996534572968036,-0.11296684125935069
+Presence of international influencers (like Tim Cook),Markets,-0.09875263849921415,-0.007169986183364698,-0.007169986183364698,-0.028798579544063306
 Public Open Data Initiatives,Policy,-0.0,-0.0,-0.0,-0.0
 Quality of Vocational Trainings,Human Capital,0.0,0.0,0.0,0.0
 Ratio of Series A to seed,Culture,-0.0,-0.0,-0.0,-0.0
 Ratio of Series C to Series A Startups,Culture,-0.0,-0.0,-0.0,-0.0
-Regulatory quality,Policy,0.0,0.0,0.0,0.0
-Salary of software engineers,Human Capital,3.562537438114034,0.1564440489933435,0.1564440489933435,0.5891677255454527
+Regulatory quality,Policy,0.10272828211318502,0.003771987472826529,0.003771987472826529,0.015150361311355935
+Salary of software engineers,Human Capital,2.5655740946492003,0.11294288656275704,0.11294288656275704,0.453640302705202
 Score of data science and tech skills,Human Capital,-0.0,-0.0,-0.0,-0.0
-Startups to total number of companies ratio,Culture,0.0,0.0,0.0,0.0
-Strength of IP Laws Score,Policy,-0.0,-0.0,-0.0,-0.0
+Startups to total number of companies ratio,Culture,0.09394274303367518,0.019889385044771495,0.019889385044771495,0.07988663055213317
+Strength of IP Laws Score,Policy,0.0,0.0,0.0,0.0
 Tax wedge,Policy,-0.0,-0.0,-0.0,-0.0
 Top Universities per country,Human Capital,-0.0,-0.0,-0.0,-0.0
 Total Government Funding allocated to early-stage Startups and Scale-ups,Markets,0.0,0.0,0.0,0.0

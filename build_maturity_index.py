@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 from sklearn.linear_model import RidgeCV, ElasticNetCV
 from sklearn.metrics import r2_score, mean_squared_error
 
-# --------- CONFIG ---------
+# ========= CONFIG =========
 DOMAINS_PATH = "domains.csv"
 SCORES_PATH  = "Input_scores.csv"
 
@@ -14,7 +14,17 @@ OUTDIR_ROOT = "outputs"  # all outputs will live here
 TGT_NORM = "# of High Growth Company - Normalized"
 TGT_RAW  = "# of High Growth Companies"
 
-# --------- IO HELPERS ---------
+# Final blend weights (sum to 1.0)
+BLEND_W_LOG      = 0.60
+BLEND_W_PERCAP   = 0.30   # ignored if HG_per_100k not available
+BLEND_W_DOMAIN   = 0.10
+
+# Optional winsorization (clipping) of indicators before modeling/scoring
+ENABLE_WINSORIZE = True
+WINSOR_LO        = 0.01    # 1st percentile
+WINSOR_HI        = 0.99    # 99th percentile
+
+# ========= IO HELPERS =========
 def ensure_dir(p: str):
     os.makedirs(p, exist_ok=True)
 
@@ -27,7 +37,7 @@ def out_paths(model: str, target: str) -> Dict[str, str]:
         "scores": os.path.join(base, "scores.csv"),
     }
 
-# --------- LOAD & PREP ---------
+# ========= LOAD & PREP =========
 def load_data(domains_path: str, scores_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if not os.path.exists(domains_path):
         raise FileNotFoundError(f"Missing {domains_path}")
@@ -87,7 +97,7 @@ def make_targets(scores: pd.DataFrame, id_cols: List[str]) -> pd.DataFrame:
             np.nan,
         )
         scores["HG_per_100k"] = hg_per_100k
-        # NEW: log target
+        # log target for primary modeling
         scores["HG_log_raw"]  = np.log1p(scores[TGT_RAW].astype(float))
     else:
         scores["HG_per_100k"] = np.nan
@@ -95,32 +105,58 @@ def make_targets(scores: pd.DataFrame, id_cols: List[str]) -> pd.DataFrame:
 
     return scores
 
-# --------- MODEL PREP & FIT ---------
+# ========= WINSORIZE HELPERS =========
+def compute_quantile_bounds(X: pd.DataFrame, lo: float, hi: float) -> pd.DataFrame:
+    """Return a dataframe with two rows: 'lo' and 'hi' quantiles for each column."""
+    qlo = X.quantile(lo, interpolation="linear")
+    qhi = X.quantile(hi, interpolation="linear")
+    return pd.DataFrame({"lo": qlo, "hi": qhi}).T  # index = ['lo','hi']
+
+def apply_bounds_clip(X: pd.DataFrame, bounds: pd.DataFrame) -> pd.DataFrame:
+    """Clip each column using previously computed bounds (columns not in bounds pass through)."""
+    Xc = X.copy()
+    for c in Xc.columns:
+        if c in bounds.columns:
+            lo = bounds.loc["lo", c]
+            hi = bounds.loc["hi", c]
+            if pd.notna(lo) and pd.notna(hi) and hi >= lo:
+                Xc[c] = Xc[c].clip(lower=lo, upper=hi)
+    return Xc
+
+# ========= MODEL PREP & FIT =========
 def preprocess_for_target(X_all: pd.DataFrame, y: pd.Series):
-    """Median-impute, drop all-NaN & zero-variance cols, z-score using training stats."""
+    """
+    Median-impute, optional winsorize (fit on train, apply to all),
+    drop all-NaN & zero-variance cols, z-score using training stats.
+    """
     mask = y.notna()
-    X = X_all.loc[mask].copy()
-    X = X.apply(pd.to_numeric, errors="coerce")
+    X_train = X_all.loc[mask].copy().apply(pd.to_numeric, errors="coerce")
 
     # drop all-NaN columns on training rows
-    X = X.loc[:, X.notna().any(axis=0)]
+    X_train = X_train.loc[:, X_train.notna().any(axis=0)]
+
+    # Optional winsorization (fit quantiles on train, apply to train)
+    bounds = None
+    if ENABLE_WINSORIZE:
+        bounds = compute_quantile_bounds(X_train, WINSOR_LO, WINSOR_HI)
+        X_train = apply_bounds_clip(X_train, bounds)
 
     # median impute
-    med = X.median(axis=0, skipna=True)
-    X = X.fillna(med)
+    med = X_train.median(axis=0, skipna=True)
+    X_train = X_train.fillna(med)
 
     # drop zero-variance
-    std = X.std(axis=0, ddof=0)
+    std = X_train.std(axis=0, ddof=0)
     keep = std[std > 0].index
-    X = X[keep]
+    X_train = X_train[keep]
 
     # standardize
-    mu  = X.mean(axis=0)
-    std = X.std(axis=0, ddof=0).replace(0, 1.0)
-    Xz  = (X - mu) / std
+    mu  = X_train.mean(axis=0)
+    std = X_train.std(axis=0, ddof=0).replace(0, 1.0)
+    Xz  = (X_train - mu) / std
 
     kept_cols = list(Xz.columns)
-    return mask, Xz, y.loc[mask], mu, std, med, kept_cols
+    return mask, Xz, y.loc[mask], mu, std, med, kept_cols, bounds
 
 def fit_models(Xz: pd.DataFrame, y: pd.Series):
     ridge = RidgeCV(alphas=np.logspace(-3, 3, 25), cv=5, scoring="neg_mean_squared_error")
@@ -160,11 +196,14 @@ def minmax_0_100(series: pd.Series) -> pd.Series:
         return pd.Series(0.0, index=series.index)
     return (series - lo) / (hi - lo) * 100.0
 
-def score_and_save(model, X_all, kept, mu, std, med, ids_df, mname, tname):
+def score_and_save(model, X_all, kept, mu, std, med, ids_df, mname, tname, bounds=None):
     """Standardize ALL rows using training stats, predict, and write per-country index 0–100."""
     paths = out_paths(mname, tname)
 
     X_num = X_all[kept].apply(pd.to_numeric, errors="coerce")
+    if bounds is not None:
+        # apply same clipping bounds to ALL rows
+        X_num = apply_bounds_clip(X_num, bounds)
     X_imp = X_num.fillna(med[kept])
     X_all_std = (X_imp - mu[kept]) / std[kept]
 
@@ -178,7 +217,7 @@ def score_and_save(model, X_all, kept, mu, std, med, ids_df, mname, tname):
 
     return paths
 
-# --------- FINAL OUTPUTS (requested) ---------
+# ========= FINAL OUTPUTS =========
 def build_unweighted_domain_scores(domains: pd.DataFrame, X_all: pd.DataFrame) -> pd.DataFrame:
     """Unweighted domain scores: mean of domain indicators per country, min-max to 0–100 across countries."""
     dmap = domains[domains["INDICATOR"].isin(X_all.columns)].copy()
@@ -209,7 +248,7 @@ def pick_country_col(df: pd.DataFrame):
             return c
     return None
 
-# --------- MAIN ---------
+# ========= MAIN =========
 def main():
     ensure_dir(OUTDIR_ROOT)
     final_dir = os.path.join(OUTDIR_ROOT, "final")
@@ -240,7 +279,7 @@ def main():
 
     # Fit models and write per-model outputs
     for tname, y in targets.items():
-        mask, Xz, y_fit, mu, std, med, kept = preprocess_for_target(X_all, y)
+        mask, Xz, y_fit, mu, std, med, kept, bounds = preprocess_for_target(X_all, y)
         if len(y_fit) < 5:
             print(f"[WARN] Not enough rows with target '{tname}' to fit models; skipping.")
             continue
@@ -269,7 +308,7 @@ def main():
             paths = out_paths(mname, tname)
             ind_w.to_csv(paths["ind"], index=False)
             dom_w.to_csv(paths["dom"], index=False)
-            score_and_save(model, X_all, kept, mu, std, med, ids_df, mname, tname)
+            score_and_save(model, X_all, kept, mu, std, med, ids_df, mname, tname, bounds=bounds)
 
             # manifest & metrics
             manifest_rows.append(dict(
@@ -286,88 +325,107 @@ def main():
 
     # ---------- FINAL REQUESTED OUTPUTS ----------
     # 1) Unweighted domain scores (0–100 per domain, per country)
+    #    (apply the SAME winsor bounds effect by leaving as-is; these are already normalized per domain)
     unweighted_domain = build_unweighted_domain_scores(domains, X_all)
+
+    # Build a simple Domain Avg index (equal domain weights → then min-max across countries)
+    dom_cols = [c for c in unweighted_domain.columns if c.startswith("DOMAIN_SCORE__")]
+    domain_avg = None
+    if dom_cols:
+        domain_avg_raw = unweighted_domain[dom_cols].mean(axis=1, skipna=True)
+        domain_avg = minmax_0_100(domain_avg_raw)
+        unweighted_domain["Final_DomainAvg_0_100"] = domain_avg
 
     # 2) Indicator scores (0–100 per indicator, per country)
     indicator_scores = build_indicator_scores_0_100(X_all)
 
-    # 3) Final_Score_0_100: use RIDGE HG_log_raw index (dense weights; no forced zeros)
-    preferred = [
-        ("ridge", "HG_log_raw"),      # primary
-        ("ridge", "HG_per_100k"),     # fallback 1
-        ("ridge", "HG_Normalized"),   # fallback 2
-        ("enet",  "HG_log_raw"),      # fallback 3
-        ("enet",  "HG_per_100k"),     # fallback 4
-        ("enet",  "HG_Normalized"),   # fallback 5
-    ]
+    # 3) Load component model indices we want to blend
+    def try_load(model, target):
+        p = os.path.join(OUTDIR_ROOT, model, target, "scores.csv")
+        return pd.read_csv(p) if os.path.exists(p) else None
 
-    selected_scores_path = None
-    for model, target in preferred:
-        cand = os.path.join(OUTDIR_ROOT, model, target, "scores.csv")
-        if os.path.exists(cand):
-            selected_scores_path = cand
-            break
+    ridge_log   = try_load("ridge", "HG_log_raw")
+    ridge_pcap  = try_load("ridge", "HG_per_100k")
 
-    if selected_scores_path is None:
-        raise RuntimeError("No model scores found to build final_scores.csv.")
+    # pick country col helper
+    c_scores = pick_country_col(scores)
 
-    model_scores = pd.read_csv(selected_scores_path)
-
-    # case-insensitive country join
-    c1 = pick_country_col(model_scores)
-    if c1 is None and detect_id_cols(scores):
-        c1 = detect_id_cols(scores)[0]
-
-    # Build final_scores: COUNTRY + domain scores + Final_Score_0_100
-    if c1 and (pick_country_col(unweighted_domain) is None):
-        # add country into domain table from original scores (align by row index)
-        orig_country_col = pick_country_col(scores)
-        if orig_country_col:
-            unweighted_domain = unweighted_domain.copy()
-            unweighted_domain[orig_country_col] = scores[orig_country_col]
-
+    # Prepare base with COUNTRY
     final_df = unweighted_domain.copy()
+    if pick_country_col(final_df) is None and c_scores:
+        final_df[c_scores] = scores[c_scores]
 
-    # bring in model index column (0–100)
-    idx_cols = [c for c in model_scores.columns if c.endswith("_index_0_100")]
-    if not idx_cols:
-        raise RuntimeError("Did not find model index column in selected scores.")
-    idx_col = idx_cols[0]
-
-    if pick_country_col(final_df) and c1:
-        cf = pick_country_col(final_df)
-        final_df = final_df.merge(
-            model_scores[[c1, idx_col]],
-            left_on=cf, right_on=c1, how="left"
-        )
-        if c1 != cf and c1 in final_df.columns:
-            final_df = final_df.drop(columns=[c1])
-    else:
-        # no country col detected; just concat by position
-        final_df = pd.concat([final_df.reset_index(drop=True), model_scores[[idx_col]].reset_index(drop=True)], axis=1)
-
-    final_df = final_df.rename(columns={idx_col: "Final_Score_0_100"})
-
-    # Reorder: COUNTRY first (if present), then domain cols, then Final
-    col_order = []
     cfinal = pick_country_col(final_df)
+
+    # Bring components
+    def merge_component(df_base, comp_df, rename_to):
+        if comp_df is None:
+            return df_base, None
+        c = pick_country_col(comp_df)
+        idx_cols = [x for x in comp_df.columns if x.endswith("_index_0_100")]
+        if not idx_cols:
+            return df_base, None
+        ic = idx_cols[0]
+        if cfinal and c:
+            df_base = df_base.merge(comp_df[[c, ic]].rename(columns={ic: rename_to}),
+                                    left_on=cfinal, right_on=c, how="left")
+            if c != cfinal and c in df_base.columns:
+                df_base = df_base.drop(columns=[c])
+        else:
+            df_base[rename_to] = comp_df[ic].values
+        return df_base, rename_to
+
+    final_df, name_log   = merge_component(final_df, ridge_log,  "Final_Log_0_100")
+    final_df, name_pcap  = merge_component(final_df, ridge_pcap, "Final_PerCap_0_100")
+
+    # Domain avg already computed
+    if "Final_DomainAvg_0_100" not in final_df.columns and domain_avg is not None:
+        final_df["Final_DomainAvg_0_100"] = domain_avg
+
+    # Build blended score
+    w_log    = BLEND_W_LOG
+    w_pcap   = BLEND_W_PERCAP if name_pcap in final_df.columns else 0.0
+    w_domain = BLEND_W_DOMAIN if "Final_DomainAvg_0_100" in final_df.columns else 0.0
+
+    # Normalize weights to sum to 1 among available components
+    w_sum = w_log + w_pcap + w_domain
+    if w_sum == 0:
+        raise RuntimeError("No components available to blend a final score.")
+    w_log, w_pcap, w_domain = w_log / w_sum, w_pcap / w_sum, w_domain / w_sum
+
+    # Weighted sum of already 0–100 components → remains 0–100 scale
+    final_df["Final_Blended_0_100"] = 0.0
+    if "Final_Log_0_100" in final_df.columns:
+        final_df["Final_Blended_0_100"] += w_log * final_df["Final_Log_0_100"]
+    if "Final_PerCap_0_100" in final_df.columns:
+        final_df["Final_Blended_0_100"] += w_pcap * final_df["Final_PerCap_0_100"]
+    if "Final_DomainAvg_0_100" in final_df.columns:
+        final_df["Final_Blended_0_100"] += w_domain * final_df["Final_DomainAvg_0_100"]
+
+    # For backward compatibility with your Streamlit app:
+    final_df["Final_Score_0_100"] = final_df["Final_Blended_0_100"]
+
+    # Reorder: COUNTRY first (if present), then domain cols, then all finals
+    col_order = []
     if cfinal:
         col_order.append(cfinal)
-    domain_cols = sorted([c for c in final_df.columns if c.startswith("DOMAIN_SCORE__")])
-    col_order.extend(domain_cols)
-    col_order.append("Final_Score_0_100")
+    col_order.extend(sorted([c for c in final_df.columns if c.startswith("DOMAIN_SCORE__")]))
+    for extra in ["Final_Log_0_100", "Final_PerCap_0_100", "Final_DomainAvg_0_100", "Final_Blended_0_100", "Final_Score_0_100"]:
+        if extra in final_df.columns:
+            col_order.append(extra)
     col_order = [c for c in col_order if c in final_df.columns]
     final_df = final_df[col_order]
 
     # Save final outputs
+    final_dir = os.path.join(OUTDIR_ROOT, "final")
+    ensure_dir(final_dir)
     final_scores_path    = os.path.join(final_dir, "final_scores.csv")
     final_indic_path     = os.path.join(final_dir, "indicator_scores.csv")
     final_df.to_csv(final_scores_path, index=False)
+
     indicator_scores_out = indicator_scores.copy()
-    # add COUNTRY column for readability if available
-    cc = pick_country_col(scores)
-    if cc:
-        indicator_scores_out.insert(0, cc, scores[cc])
+    if c_scores and c_scores not in indicator_scores_out.columns:
+        indicator_scores_out.insert(0, c_scores, scores[c_scores])
     indicator_scores_out.to_csv(final_indic_path, index=False)
 
     print("Done.")
