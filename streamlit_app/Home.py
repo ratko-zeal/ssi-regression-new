@@ -236,10 +236,15 @@ else:
     color_map = dict(zip(comparison_countries, COMPARISON_COLORS))
     
     radar_labels = [c.replace("DOMAIN_SCORE__", "") for c in domain_cols]
+    
+    radar_labels.append(radar_labels[0])
+    
     radar_fig = go.Figure()
     
     for country in comparison_countries:
         vals = df.loc[df[COL_COUNTRY] == country, domain_cols].iloc[0].tolist()
+        vals.append(vals[0])
+        
         radar_fig.add_trace(go.Scatterpolar(
             r=vals, 
             theta=radar_labels, 
