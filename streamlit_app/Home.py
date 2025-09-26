@@ -118,24 +118,39 @@ with col1:
         fig = px.bar(rank, x=COL_COUNTRY, y=score_to_show, color_discrete_sequence=['#054b81'])
         n = len(rank)
         
-        mature_indices = rank[rank['Maturity'] == 'Mature'].index
-        advancing_indices = rank[rank['Maturity'] == 'Advancing'].index
-        pos_mature_end = (mature_indices.max() + 1) / n if not mature_indices.empty else 0
-        pos_advancing_end = (advancing_indices.max() + 1) / n if not advancing_indices.empty else pos_mature_end
+        # --- THIS LOGIC IS NOW UPDATED ---
+        # Find the last index (position) for each maturity group
+        mature_indices = rank.index[rank['Maturity'] == 'Mature'].tolist()
+        advancing_indices = rank.index[rank['Maturity'] == 'Advancing'].tolist()
 
-        if pos_mature_end > 0:
-            fig.add_vrect(x0=0, x1=pos_mature_end, fillcolor="#ff7433", opacity=0.5, line_width=0, layer="below")
-            fig.add_annotation(x=(pos_mature_end / 2), y=rank[score_to_show].max(), yref='y', xref='paper',
-                               text="<b>Mature</b>", showarrow=False, yshift=10)
-        if pos_advancing_end > pos_mature_end:
-            fig.add_vrect(x0=pos_mature_end, x1=pos_advancing_end, fillcolor="#59b0F2", opacity=0.5, line_width=0, layer="below")
-            fig.add_annotation(x=((pos_mature_end + pos_advancing_end) / 2), y=rank[score_to_show].max(), yref='y', xref='paper',
-                               text="<b>Advancing</b>", showarrow=False, yshift=10)
-        if pos_advancing_end < 1:
-            fig.add_vrect(x0=pos_advancing_end, x1=1, fillcolor="#0865AC", opacity=0.5, line_width=0, layer="below")
-            fig.add_annotation(x=((pos_advancing_end + 1) / 2), y=rank[score_to_show].max(), yref='y', xref='paper',
-                               text="<b>Nascent</b>", showarrow=False, yshift=10)
+        last_mature_idx = mature_indices[-1] if mature_indices else -1
+        last_advancing_idx = advancing_indices[-1] if advancing_indices else last_mature_idx
+
+        # We now use the bar indices directly for the coordinates (e.g., from bar -0.5 to 10.5)
+        # This is more reliable than using 'paper' for categorical axes.
         
+        # Add Mature background area
+        if last_mature_idx > -1:
+            fig.add_vrect(x0=-0.5, x1=last_mature_idx + 0.5, 
+                          fillcolor="#ff7433", opacity=0.5, line_width=0, layer="below")
+            fig.add_annotation(x=(last_mature_idx - 0.5) / 2, y=rank[score_to_show].max(),
+                               text="<b>Mature</b>", showarrow=False, yshift=10)
+
+        # Add Advancing background area
+        if last_advancing_idx > last_mature_idx:
+            fig.add_vrect(x0=last_mature_idx + 0.5, x1=last_advancing_idx + 0.5, 
+                          fillcolor="#59b0F2", opacity=0.5, line_width=0, layer="below")
+            fig.add_annotation(x=(last_mature_idx + last_advancing_idx) / 2 + 0.5, y=rank[score_to_show].max(),
+                               text="<b>Advancing</b>", showarrow=False, yshift=10)
+        
+        # Add Nascent background area
+        if last_advancing_idx < n - 1:
+            fig.add_vrect(x0=last_advancing_idx + 0.5, x1=n - 0.5, 
+                          fillcolor="#0865AC", opacity=0.5, line_width=0, layer="below")
+            fig.add_annotation(x=(last_advancing_idx + n) / 2, y=rank[score_to_show].max(),
+                               text="<b>Nascent</b>", showarrow=False, yshift=10)
+
+        # Make the plot background transparent so the vrects show through
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)') 
         
         fig.update_layout(xaxis_title=None, yaxis_title=score_to_show.replace("_", " "),
