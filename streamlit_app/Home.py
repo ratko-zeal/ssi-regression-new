@@ -301,3 +301,148 @@ with st.expander("About This Dashboard"):
         - **Nascent:** Score <= 20
     - **Files Used:** `final_scores.csv`, `indicator_scores.csv`, `country_regions.csv`, `domains.csv`, and `Input_scores.csv`.
     """)
+
+# --- Chatbot (Lean MVP) ---
+import os
+from typing import Literal
+
+st.divider()
+with st.expander("Chat (beta)", expanded=False):
+
+    # 1) Session state for chat history
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = [
+            {"role": "assistant", "content": "Hi! I can answer questions about the Ecosystem Maturity Index. Ask me about countries, domains, indicators, or say 'plot top 10'."}
+        ]
+
+    # 2) Small “tool” layer the model can request (we invoke these in Python)
+    def tool_summarize_view():
+        return {
+            "rows": len(df),
+            "score": data["score_to_show"],
+            "regions": sorted(df[COL_REGION].dropna().unique().tolist()),
+            "countries": len(df[COL_COUNTRY].unique())
+        }
+
+    def tool_topk(metric: str, k: int = 10, region: str | None = None):
+        _metric = metric if metric in df.columns else data["score_to_show"]
+        d = df if region is None else df[df[COL_REGION] == region]
+        res = d[[COL_COUNTRY, _metric]].dropna().sort_values(_metric, ascending=False).head(k)
+        return res.to_dict(orient="records")
+
+    def tool_plot_topk(metric: str, k: int = 10):
+        _metric = metric if metric in df.columns else data["score_to_show"]
+        top = df[[COL_COUNTRY, _metric]].dropna().sort_values(_metric, ascending=False).head(k)
+        if top.empty:
+            st.info("Nothing to plot for that request.")
+            return
+        fig = px.bar(top, x=COL_COUNTRY, y=_metric, color_discrete_sequence=['#054b81'])
+        fig.update_layout(margin=dict(l=0, r=0, t=30, b=0), showlegend=False, xaxis_title=None, yaxis_title=_metric)
+        fig.update_xaxes(tickangle=-60)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # 3) A tiny intent router (no external libs)
+    def parse_intent(text: str) -> dict:
+        t = text.lower().strip()
+        if t.startswith("plot"):
+            # examples: "plot top 10", "plot top 5 by Final_Score_0_100"
+            import re
+            k = 10
+            m_k = re.search(r"top\s+(\d+)", t)
+            if m_k: k = int(m_k.group(1))
+            # try to extract metric by column name mention
+            metric = data["score_to_show"]
+            for c in df.columns:
+                if c.lower() in t:
+                    metric = c
+                    break
+            return {"intent": "plot_topk", "metric": metric, "k": k}
+        if "top" in t:
+            import re
+            k = 10
+            m_k = re.search(r"top\s+(\d+)", t)
+            if m_k: k = int(m_k.group(1))
+            metric = data["score_to_show"]
+            for c in df.columns:
+                if c.lower() in t:
+                    metric = c
+                    break
+            # optional region mention
+            region = None
+            for r in df[COL_REGION].dropna().unique():
+                if r.lower() in t:
+                    region = r
+                    break
+            return {"intent": "topk", "metric": metric, "k": k, "region": region}
+        if "summary" in t or "summarize" in t or "overview" in t:
+            return {"intent": "summarize"}
+        return {"intent": "chat"}  # default: general chat
+
+    # 4) Simple model response helper (provider-agnostic)
+    def llm_reply(system: str, user: str) -> str:
+        # Minimal fallback if no API key: a local canned response
+        if not os.getenv("OPENAI_API_KEY"):
+            return "I’m running in local mode. I can run the tools (filters, top-k, simple plots). For richer natural language answers, set OPENAI_API_KEY."
+        # OpenAI example (swap with your preferred provider)
+        from openai import OpenAI
+        client = OpenAI()
+        msg = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": user}],
+            temperature=0.2,
+        )
+        return msg.choices[0].message.content
+
+    # 5) Render history
+    for m in st.session_state.chat_messages:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    # 6) Handle new input
+    if prompt := st.chat_input("Ask about the current view (respects sidebar filters)…"):
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+
+        # establish system context with safe metadata (not raw CSV)
+        system = (
+            "You are a helpful data copilot for a Streamlit dashboard. "
+            "Only talk about columns the app has: "
+            f"{list(final_df.columns)}. Current score column: {data['score_to_show']}. "
+            "When asked for results, prefer concise bullet points. "
+            "If a user asks for a plot, the app will render it; you should just explain what will be shown."
+        )
+
+        intent = parse_intent(prompt)
+
+        with st.chat_message("assistant"):
+            if intent["intent"] == "summarize":
+                info = tool_summarize_view()
+                reply = (
+                    f"Current view has **{info['rows']} rows** across **{info['countries']} countries**, "
+                    f"score column is **{info['score']}**. Regions visible: {', '.join(info['regions'])}."
+                )
+                st.markdown(reply)
+                st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+
+            elif intent["intent"] == "topk":
+                rows = tool_topk(intent["metric"], intent["k"], intent.get("region"))
+                if not rows:
+                    out = "No results for that request."
+                else:
+                    lines = [f"{i+1}. {r[COL_COUNTRY]} — {list(r.values())[1]}" for i, r in enumerate(rows)]
+                    out = "**Top results:**\n\n" + "\n".join(lines)
+                st.markdown(out)
+                st.session_state.chat_messages.append({"role": "assistant", "content": out})
+
+            elif intent["intent"] == "plot_topk":
+                # text response + actual chart
+                out = f"Plotting top {intent['k']} by **{intent['metric']}** for the current filtered view."
+                st.markdown(out)
+                tool_plot_topk(intent["metric"], intent["k"])
+                st.session_state.chat_messages.append({"role": "assistant", "content": out})
+
+            else:
+                # general chat – optional LLM call if key set
+                reply = llm_reply(system, prompt)
+                st.markdown(reply)
+                st.session_state.chat_messages.append({"role": "assistant", "content": reply})
