@@ -102,7 +102,6 @@ st.title("Ecosystem Maturity Index")
 
 # --- GRAPH 1 & 2: Leaderboard and Pie Chart ---
 st.subheader("Ecosystem Maturity Breakdown")
-# --- NEW: Create two columns for the bar and pie charts ---
 col1, col2 = st.columns([3, 1])
 
 with col1:
@@ -113,7 +112,6 @@ with col1:
     if rank.empty:
         st.info("No countries to display. Adjust filters.")
     else:
-        # --- UPDATED: Bar color is now fixed ---
         fig = px.bar(rank, x=COL_COUNTRY, y=score_to_show, color_discrete_sequence=['#054b81'])
         n = len(rank)
         
@@ -122,7 +120,6 @@ with col1:
         pos_mature_end = (mature_indices.max() + 1) / n if not mature_indices.empty else 0
         pos_advancing_end = (advancing_indices.max() + 1) / n if not advancing_indices.empty else pos_mature_end
 
-        # --- UPDATED: Background colors and opacity as requested ---
         if pos_mature_end > 0:
             fig.add_vrect(x0=0, x1=pos_mature_end, fillcolor="#ff7433", opacity=0.5, line_width=0, layer="below")
             fig.add_annotation(x=(pos_mature_end / 2), y=rank[score_to_show].max(), yref='y', xref='paper',
@@ -136,10 +133,29 @@ with col1:
             fig.add_annotation(x=((pos_advancing_end + 1) / 2), y=rank[score_to_show].max(), yref='y', xref='paper',
                                text="<b>Nascent</b>", showarrow=False, yshift=10)
         
+        # --- THIS IS THE FIX ---
+        # Make the plot background transparent so the vrects show through
+        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)') 
+        
         fig.update_layout(xaxis_title=None, yaxis_title=score_to_show.replace("_", " "),
                           margin=dict(l=0, r=0, t=30, b=0), showlegend=False)
         fig.update_xaxes(tickangle=-75)
         st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    if not rank.empty:
+        pie_data = rank.groupby('Maturity')[COL_COUNTRY].count().reset_index()
+        fig_pie = px.pie(
+            pie_data, values=COL_COUNTRY, names='Maturity',
+            hole=0.5,
+            color='Maturity',
+            color_discrete_map={'Mature': '#ff7433', 'Advancing': '#59b0F2', 'Nascent': '#0865AC'}
+        )
+        fig_pie.update_layout(
+            annotations=[dict(text='Maturity', x=0.5, y=0.5, font_size=20, showarrow=False)],
+            showlegend=True, margin=dict(l=0, r=0, t=0, b=0)
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
 
 # --- NEW: Pie chart in the second column ---
 with col2:
