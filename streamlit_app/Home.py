@@ -88,6 +88,9 @@ final_df, ind_df, dom_map, input_df, score_to_show = (
     data["input_df"], data["score_to_show"]
 )
 
+# --- NEW: Define a consistent color palette for comparison charts ---
+COMPARISON_COLORS = ["#054b81", "#FF7433", "#59b0F2", "#29A0B1", "#686868"]
+
 # --- Sidebar ---
 st.sidebar.header("Filters")
 regions_list = sorted(final_df[COL_REGION].dropna().unique().tolist())
@@ -133,8 +136,6 @@ with col1:
             fig.add_annotation(x=((pos_advancing_end + 1) / 2), y=rank[score_to_show].max(), yref='y', xref='paper',
                                text="<b>Nascent</b>", showarrow=False, yshift=10)
         
-        # --- THIS IS THE FIX ---
-        # Make the plot background transparent so the vrects show through
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)') 
         
         fig.update_layout(xaxis_title=None, yaxis_title=score_to_show.replace("_", " "),
@@ -143,35 +144,22 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    if not rank.empty:
-        pie_data = rank.groupby('Maturity')[COL_COUNTRY].count().reset_index()
-        fig_pie = px.pie(
-            pie_data, values=COL_COUNTRY, names='Maturity',
-            hole=0.5,
-            color='Maturity',
-            color_discrete_map={'Mature': '#ff7433', 'Advancing': '#59b0F2', 'Nascent': '#0865AC'}
-        )
-        fig_pie.update_layout(
-            annotations=[dict(text='Maturity', x=0.5, y=0.5, font_size=20, showarrow=False)],
-            showlegend=True, margin=dict(l=0, r=0, t=0, b=0)
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-# --- NEW: Pie chart in the second column ---
-with col2:
-    if not rank.empty:
-        pie_data = rank.groupby('Maturity')[COL_COUNTRY].count().reset_index()
-        fig_pie = px.pie(
-            pie_data, values=COL_COUNTRY, names='Maturity',
-            hole=0.5,
-            color='Maturity',
-            color_discrete_map={'Mature': '#ff7433', 'Advancing': '#59b0F2', 'Nascent': '#0865AC'}
-        )
-        fig_pie.update_layout(
-            annotations=[dict(text='Maturity', x=0.5, y=0.5, font_size=20, showarrow=False)],
-            showlegend=True, margin=dict(l=0, r=0, t=0, b=0)
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
+    # --- THIS IS THE FIX ---
+    # Wrap the chart in a container to prevent ID conflicts
+    with st.container():
+        if not rank.empty:
+            pie_data = rank.groupby('Maturity')[COL_COUNTRY].count().reset_index()
+            fig_pie = px.pie(
+                pie_data, values=COL_COUNTRY, names='Maturity',
+                hole=0.5,
+                color='Maturity',
+                color_discrete_map={'Mature': '#ff7433', 'Advancing': '#59b0F2', 'Nascent': '#0865AC'}
+            )
+            fig_pie.update_layout(
+                annotations=[dict(text='Maturity', x=0.5, y=0.5, font_size=20, showarrow=False)],
+                showlegend=True, margin=dict(l=0, r=0, t=0, b=0)
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
 
 st.divider()
 
@@ -220,21 +208,36 @@ comparison_countries = st.multiselect(
     options=sorted(df[COL_COUNTRY].unique().tolist()),
     default=top_countries, max_selections=5, key="country_comparator"
 )
-# (Rest of deep-dive code remains the same...)
+# --- Radar Chart ---
 st.markdown("##### Domain Profile (Radar)")
 domain_cols = [c for c in final_df.columns if c.startswith("DOMAIN_SCORE__")]
+
 if not domain_cols:
     st.info("No `DOMAIN_SCORE__*` columns found.")
 elif not comparison_countries:
     st.caption("Select countries to view the radar chart.")
 else:
+    # Create a color map for the selected countries
+    color_map = dict(zip(comparison_countries, COMPARISON_COLORS))
+    
     radar_labels = [c.replace("DOMAIN_SCORE__", "") for c in domain_cols]
     radar_fig = go.Figure()
+    
     for country in comparison_countries:
         vals = df.loc[df[COL_COUNTRY] == country, domain_cols].iloc[0].tolist()
-        radar_fig.add_trace(go.Scatterpolar(r=vals, theta=radar_labels, fill='toself', name=country))
-    radar_fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-                            showlegend=True, margin=dict(l=40, r=40, t=40, b=40))
+        radar_fig.add_trace(go.Scatterpolar(
+            r=vals, 
+            theta=radar_labels, 
+            fill='toself', 
+            name=country,
+            line=dict(color=color_map.get(country)) # Apply color here
+        ))
+
+    radar_fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+        showlegend=True, 
+        margin=dict(l=40, r=40, t=40, b=40)
+    )
     st.plotly_chart(radar_fig, use_container_width=True)
 
 st.markdown("##### Indicator Drill-Down")
