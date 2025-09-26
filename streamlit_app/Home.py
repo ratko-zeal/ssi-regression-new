@@ -5,6 +5,8 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
+from AI.ai_helper import render_ai_sidebar_chat
+
 # --- Page Configuration ---
 st.set_page_config(page_title="Ecosystem Maturity Index", layout="wide")
 
@@ -244,7 +246,7 @@ else:
     for country in comparison_countries:
         vals = df.loc[df[COL_COUNTRY] == country, domain_cols].iloc[0].tolist()
         vals.append(vals[0])
-        
+
         radar_fig.add_trace(go.Scatterpolar(
             r=vals, 
             theta=radar_labels, 
@@ -302,3 +304,15 @@ else:
             fig_bars.for_each_xaxis(lambda axis: axis.update(title="", range=[0, 105]))
             st.plotly_chart(fig_bars, use_container_width=True)
 
+render_ai_sidebar_chat(
+    final_df=final_df,
+    ind_df=ind_df,
+    dom_map=dom_map,
+    view_df=df,
+    score_to_show=score_to_show,
+    col_country=COL_COUNTRY,
+    col_region=COL_REGION,
+    domain_prefix="DOMAIN_SCORE__",
+    allow_global_prefix=True,
+    sidebar_title="AI Assistant"
+)
