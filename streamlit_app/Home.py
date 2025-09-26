@@ -8,9 +8,9 @@ import plotly.graph_objects as go
 # --- Page Configuration ---
 st.set_page_config(page_title="Ecosystem Maturity Index", layout="wide")
 
-# --- Constants for Column Names (for robustness and clarity) ---
-COL_COUNTRY = "Country"
-COL_REGION = "Region"
+# --- Constants for Column Names (ALL CAPS to match CSVs) ---
+COL_COUNTRY = "COUNTRY"
+COL_REGION = "REGION"
 COL_INDICATOR = "INDICATOR"
 COL_DOMAIN = "DOMAIN"
 # Auto-select the main score column to use throughout the app
@@ -172,10 +172,16 @@ hg_col = try_find_hg_col(final_df) or try_find_hg_col(input_df)
 if hg_col is None:
     st.info("No High Growth Companies column found in data files.")
 else:
+    # Ensure the country column in input_df matches the standard for merging
+    if input_df is not None and 'COUNTRY' not in input_df.columns and 'Country' in input_df.columns:
+        input_df = input_df.rename(columns={'Country': 'COUNTRY'})
+        
     if hg_col in final_df.columns:
         bubble_df = df.copy()
-    else: # Merge from input_df if needed
+    elif input_df is not None and hg_col in input_df.columns: # Merge from input_df if needed
         bubble_df = df.merge(input_df[[COL_COUNTRY, hg_col]], on=COL_COUNTRY, how="left")
+    else:
+        bubble_df = df.copy() # Fallback
 
     bubble_df = bubble_df[[COL_COUNTRY, score_to_show, 'Maturity', hg_col]].dropna()
 
@@ -255,6 +261,9 @@ elif not comparison_countries:
     st.caption("Select one or more countries to view indicator scores.")
 else:
     # Prepare indicator data for selected countries
+    if 'COUNTRY' not in ind_df.columns and 'Country' in ind_df.columns:
+        ind_df = ind_df.rename(columns={'Country': 'COUNTRY'})
+
     work_df = ind_df.merge(df[[COL_COUNTRY]], on=COL_COUNTRY, how="inner")
     domains_list = sorted(dom_map[COL_DOMAIN].dropna().unique().tolist())
     tabs = st.tabs(domains_list)
