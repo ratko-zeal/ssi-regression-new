@@ -428,6 +428,32 @@ def main():
         indicator_scores_out.insert(0, c_scores, scores[c_scores])
     indicator_scores_out.to_csv(final_indic_path, index=False)
 
+    # --- ADD THIS BLOCK: Consolidate indicator weights for easy analysis ---
+    print("Consolidating indicator weights...")
+    ridge_log_w = try_load("ridge", "HG_log_raw")
+    ridge_pcap_w = try_load("ridge", "HG_per_100k")
+
+    df_log = pd.read_csv(out_paths("ridge", "HG_log_raw")["ind"]) if os.path.exists(out_paths("ridge", "HG_log_raw")["ind"]) else None
+    df_pcap = pd.read_csv(out_paths("ridge", "HG_per_100k")["ind"]) if os.path.exists(out_paths("ridge", "HG_per_100k")["ind"]) else None
+
+    if df_log is not None:
+        df_log = df_log.rename(columns={
+            "weight_indicator_norm": "weight_norm_log_model",
+            "coef_original_scale": "coef_orig_log_model"
+        })
+        merged_weights = df_log[["INDICATOR", "DOMAIN", "weight_norm_log_model", "coef_orig_log_model"]]
+
+        if df_pcap is not None:
+            df_pcap = df_pcap.rename(columns={
+                "weight_indicator_norm": "weight_norm_per_capita_model",
+                "coef_original_scale": "coef_orig_per_capita_model"
+            })
+            merged_weights = merged_weights.merge(df_pcap[["INDICATOR", "weight_norm_per_capita_model", "coef_orig_per_capita_model"]], on="INDICATOR", how="outer")
+
+        merged_weights.to_csv(os.path.join(final_dir, "consolidated_indicator_weights.csv"), index=False)
+        print(f"Consolidated weights: {os.path.join(final_dir, 'consolidated_indicator_weights.csv')}")
+
+
     print("Done.")
     print(f"Manifest: {os.path.join(OUTDIR_ROOT, '_manifest_outputs.csv')}")
     print(f"Metrics:  {os.path.join(OUTDIR_ROOT, '_metrics.csv')}")

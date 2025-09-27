@@ -257,6 +257,14 @@ if not domain_cols:
 elif not comparison_countries:
     st.caption("Select countries to view the radar chart.")
 else:
+    # --- ADD THIS BLOCK to calculate rank-percentile scores for the radar chart ---
+    # This avoids the "USA problem" where one outlier squishes the 0-100 scale.
+    radar_df = df[[COL_COUNTRY] + domain_cols].copy()
+    for col in domain_cols:
+        # Calculate rank (highest is rank 1), then convert to percentile
+        # .rank(pct=True) gives percentile from 0-1, so we multiply by 100
+        radar_df[col] = radar_df[col].rank(method='min', ascending=False).apply(lambda x: 100 * (1 - (x - 1) / len(radar_df)))
+
     # Create a color map for the selected countries
     color_map = dict(zip(comparison_countries, COMPARISON_COLORS))
     
@@ -268,6 +276,8 @@ else:
     
     for country in comparison_countries:
         vals = df.loc[df[COL_COUNTRY] == country, domain_cols].iloc[0].tolist()
+        # Grab the percentile-ranked values for the plot
+        vals = radar_df.loc[radar_df[COL_COUNTRY] == country, domain_cols].iloc[0].tolist()
         vals.append(vals[0])
 
         radar_fig.add_trace(go.Scatterpolar(
