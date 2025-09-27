@@ -41,9 +41,19 @@ def load_data():
     dom_map = pd.read_csv(paths["domains"]) if paths["domains"].exists() else None
     input_df = pd.read_csv(paths["input"]) if paths["input"].exists() else None
 
+    # --- ADD THIS BLOCK to standardize all loaded dataframes ---
+    for df in [final_df, ind_df, reg_df, dom_map, input_df]:
+        standardize_columns(df)
+
     if final_df is None or ind_df is None:
         st.error("Fatal Error: `final_scores.csv` and `indicator_scores.csv` must be present.")
         st.stop()
+
+    if reg_df is not None and COL_COUNTRY in reg_df.columns and COL_REGION in reg_df.columns:
+        final_df = final_df.merge(reg_df[[COL_COUNTRY, COL_REGION]], on=COL_COUNTRY, how="left")
+    else:
+        final_df[COL_REGION] = "Global"
+
     if COL_COUNTRY not in final_df.columns:
         st.error(f"Fatal Error: `final_scores.csv` must include a '{COL_COUNTRY}' column.")
         st.stop()
@@ -52,11 +62,6 @@ def load_data():
     if score_to_show is None:
         st.error(f"Fatal Error: No final score column found.")
         st.stop()
-
-    if reg_df is not None and COL_COUNTRY in reg_df.columns and COL_REGION in reg_df.columns:
-        final_df = final_df.merge(reg_df[[COL_COUNTRY, COL_REGION]], on=COL_COUNTRY, how="left")
-    else:
-        final_df[COL_REGION] = "Global"
 
     # --- UPDATED: New maturity ranges as requested ---
     def assign_maturity(score):
@@ -73,6 +78,26 @@ def load_data():
         "final_df": final_df, "ind_df": ind_df, "dom_map": dom_map,
         "input_df": input_df, "score_to_show": score_to_show
     }
+
+def standardize_columns(df: pd.DataFrame):
+    """
+    Standardizes column names to uppercase for consistent access.
+    e.g., 'Country' or 'country' becomes 'COUNTRY'.
+    """
+    if df is None:
+        return
+
+    rename_map = {}
+    # Create a map of {current_col: standardized_col}
+    for col in df.columns:
+        std_col = col.upper().strip()
+        # Map all predefined constant columns to their standard form
+        if std_col in [COL_COUNTRY, COL_REGION, COL_INDICATOR, COL_DOMAIN]:
+            rename_map[col] = std_col
+
+    if rename_map:
+        df.rename(columns=rename_map, inplace=True)
+
 
 def try_find_hg_col(df: pd.DataFrame):
     if df is None: return None
@@ -186,8 +211,6 @@ hg_col = try_find_hg_col(final_df) or try_find_hg_col(input_df)
 if hg_col is None:
     st.info("No High Growth Companies column found in data files.")
 else:
-    if 'COUNTRY' not in (input_df.columns if input_df is not None else []) and 'Country' in (input_df.columns if input_df is not None else []):
-        input_df = input_df.rename(columns={'Country': 'COUNTRY'})
     bubble_df = df.merge(input_df[[COL_COUNTRY, hg_col]], on=COL_COUNTRY, how="left") if hg_col in (input_df.columns if input_df is not None else []) else df
     bubble_df = bubble_df[[COL_COUNTRY, score_to_show, 'Maturity', hg_col]].dropna()
 
@@ -268,8 +291,6 @@ if dom_map is None or ind_df is None:
 elif not comparison_countries:
     st.caption("Select countries to view indicator scores.")
 else:
-    if 'COUNTRY' not in ind_df.columns and 'Country' in ind_df.columns:
-        ind_df = ind_df.rename(columns={'Country': 'COUNTRY'})
     work_df = ind_df.merge(df[[COL_COUNTRY]], on=COL_COUNTRY, how="inner")
     domains_list = sorted(dom_map[COL_DOMAIN].dropna().unique().tolist())
     tabs = st.tabs(domains_list)
