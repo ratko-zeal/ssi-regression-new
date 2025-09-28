@@ -409,13 +409,11 @@ st.sidebar.markdown("#### Global Ecosystem Data")
 
 # Body text of the CTA
 st.sidebar.markdown(
-    "Analyze the landscape of entrepreneurial support. "
-    "This interactive tool maps stakeholders across developing "
-    "economies to identify key players and gaps."
+    "Explore a global database of ecosystem support organizations."
 )
 
 # The actual button that links to your page
-st.sidebar.link_button("View the Ecosystem Maps", "https://example.com") # 👈 Replace with your URL
+st.sidebar.link_button("View the Ecosystem Maps", "https://andeglobal.org/ecosystem-maps/") # 👈 Replace with your URL
 
 
 # --- Powered By Logos ---
