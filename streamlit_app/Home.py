@@ -400,6 +400,24 @@ if prompt := st.chat_input("Ask about the maturity index..."):
             st.error("OpenAI API key not found. Please add it to your Streamlit secrets to enable the AI assistant.")
             st.stop()
 
+# --- CTA Section ---
+# This creates a visual separator from the filters above
+st.sidebar.markdown("---")
+
+# Title of the CTA
+st.sidebar.markdown("#### Global Ecosystem Data")
+
+# Body text of the CTA
+st.sidebar.markdown(
+    "Analyze the landscape of entrepreneurial support. "
+    "This interactive tool maps stakeholders across developing "
+    "economies to identify key players and gaps."
+)
+
+# The actual button that links to your page
+st.sidebar.link_button("View the Ecosystem Maps", "https://example.com") # 👈 Replace with your URL
+
+
 # --- Powered By Logos ---
 
 # Get the absolute path to the current script's directory
