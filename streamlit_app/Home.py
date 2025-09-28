@@ -335,7 +335,7 @@ else:
             fig_bars.for_each_xaxis(lambda axis: axis.update(title="", range=[0, 105]))
             st.plotly_chart(fig_bars, use_container_width=True)
 
-# --- AI Chat Section (in Home.py) ---
+# --- AI Chat Section ---
 st.subheader("🤖 AI Assistant")
 
 if "messages" not in st.session_state:
@@ -351,23 +351,32 @@ if prompt := st.chat_input("Ask about the maturity index..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        # --- THIS BLOCK IS UPDATED ---
         # 1. Check if the secret is available
         if "openai" in st.secrets and "api_key" in st.secrets.openai:
-            # 2. Retrieve the API key from secrets
             api_key = st.secrets.openai.api_key
             
-            # 3. Call the helper function with the key
+            # 2. Create a placeholder for the "Thinking..." message
+            placeholder = st.empty()
+            placeholder.markdown("Thinking...")
+            
+            # 3. Call the AI helper function
             response_generator = get_ai_response(
                 prompt=prompt,
-                api_key=api_key, # This is the crucial part
+                api_key=api_key,
                 final_df=final_df,
                 ind_df=ind_df,
                 dom_map=dom_map,
                 chat_history=st.session_state.messages
             )
-            full_response = st.write_stream(response_generator)
+            
+            # 4. Stream the response into the placeholder, replacing "Thinking..."
+            full_response = placeholder.write_stream(response_generator)
+            
+            # 5. Add the complete response to the session state
             st.session_state.messages.append({"role": "assistant", "content": full_response})
         else:
-            # 4. Show an error if the key is not found
+            # Show an error if the key is not found
             st.error("OpenAI API key not found. Please add it to your Streamlit secrets to enable the AI assistant.")
             st.stop()
+

@@ -93,29 +93,26 @@ def get_ai_response(prompt: str, api_key: str, final_df: pd.DataFrame, ind_df: p
 
     # --- 4. Call the new OpenAI Responses API ---
     try:
-        # NOTE: The 'responses.create' streams by default if you iterate over it.
-        # The 'stream=True' parameter is not used in the new API structure.
-        response_stream = client.responses.create(
+        # --- MODIFICATION ---
+        # Instead of iterating through a stream, we make a single API call
+        # and directly access the final text, as shown in the new API's documentation.
+        # This resolves the "'tuple' object has no attribute 'type'" error.
+        response = client.responses.create(
             model=MODEL_NAME,
             instructions=INSTRUCTIONS,
             input=context,
             # Let's add the native web_search tool as requested in the vision!
-            tools=[{"type": "web_search"}] 
+            tools=[{"type": "web_search"}]
         )
-        
-        # The new API might return different object structures, we adapt to stream text chunks
-        # This part assumes a similar streaming mechanism. If the final object is different,
-        # this loop would need adjustment. The documentation implies a streaming-compatible response.
-        for item in response_stream:
-             # We look for message items and extract the text content
-            if item.type == 'message' and hasattr(item, 'content') and item.content:
-                text_content = item.content[0].text if hasattr(item.content[0], 'text') else None
-                if text_content:
-                    yield text_content
-            # The new API might also return final text in a simpler 'output_text' helper
-            elif hasattr(item, 'output_text') and item.output_text:
-                 yield item.output_text
-                 break # break if we get the full text at once
+
+        # The documentation shows the final text is available in the 'output_text' attribute.
+        # We yield this single complete response. Streamlit's write_stream can handle this.
+        if hasattr(response, 'output_text') and response.output_text:
+            yield response.output_text
+        else:
+            # Provide a fallback message if the expected text is not found.
+            yield "Sorry, I could not generate a valid response. The API might be busy or the response format was unexpected."
+
 
     except Exception as e:
         # Attempt to provide a more user-friendly error message
@@ -133,3 +130,5 @@ SCORE_CANDIDATES = [
     "Final_Score_0_100", "Final_Blended_0_100", "Final_Log_0_100",
     "Final_PerCap_0_100", "Final_DomainAvg_0_100"
 ]
+
+
