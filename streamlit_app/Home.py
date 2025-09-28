@@ -402,15 +402,24 @@ if prompt := st.chat_input("Ask about the maturity index..."):
 
 # --- Powered By Logos ---
 
+# Get the absolute path to the current script's directory
+script_dir = Path(__file__).resolve().parent
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("##### Powered by")
 
 # Create two columns in the sidebar
 col1, col2 = st.sidebar.columns(2)
 
-# Display logos in their respective columns
+# Display logos using the full, reliable path
 with col1:
-    st.image("logos/Seedstars - Logo.png", use_column_width=True)
+    st.image(
+        str(script_dir / "logos" / "Seedstars - Logo.png"),
+        use_container_width=True # Use the new parameter name
+    )
 
 with col2:
-    st.image("logos/ANDE - Logo.png", use_column_width=True)
+    st.image(
+        str(script_dir / "logos" / "ANDE - Logo.png"),
+        use_container_width=True # Use the new parameter name
+    )
