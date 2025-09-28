@@ -5,7 +5,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
-from AI.ai_helper import render_ai_sidebar_chat
+from AI.ai_helper import get_ai_response
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Ecosystem Maturity Index", layout="wide")
@@ -335,15 +335,63 @@ else:
             fig_bars.for_each_xaxis(lambda axis: axis.update(title="", range=[0, 105]))
             st.plotly_chart(fig_bars, use_container_width=True)
 
-render_ai_sidebar_chat(
-    final_df=final_df,
-    ind_df=ind_df,
-    dom_map=dom_map,
-    view_df=df,
-    score_to_show=score_to_show,
-    col_country=COL_COUNTRY,
-    col_region=COL_REGION,
-    domain_prefix="DOMAIN_SCORE__",
-    allow_global_prefix=True,
-    sidebar_title="AI Assistant"
+# --- NEW: AI Chatbot Section ---
+st.divider()
+st.subheader("🤖 AI Ecosystem Analyst")
+
+# Get OpenAI API key from user
+api_key_input = st.text_input(
+    "Enter your OpenAI API Key:",
+    type="password",
+    placeholder="sk-...",
+    help="You can find your API key at https://platform.openai.com/api-keys",
+    key="openai_api_key_input"
 )
+
+# Initialize chat history in session state
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! How can I help you analyze the ecosystem data today?"}]
+
+# Display past messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Get user input
+if prompt := st.chat_input("Ask about a country, compare ecosystems, or ask for improvement ideas...", key="chat_input"):
+    # Store and display the user's message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Check for API key
+    openai_api_key = api_key_input or st.session_state.get("openai_api_key")
+    if not openai_api_key:
+        with st.chat_message("assistant"):
+            st.warning("Please enter your OpenAI API key to continue.")
+        st.stop()
+    st.session_state["openai_api_key"] = openai_api_key
+    
+    # Generate and display the AI's response
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            response = get_ai_response(
+                prompt,
+                api_key=openai_api_key,
+                final_df=df, # Use the filtered dataframe
+                ind_df=ind_df,
+                dom_map=dom_map,
+                chat_history=st.session_state.messages
+            )
+            
+            # Use a typewriter effect to stream the response
+            full_response = ""
+            message_placeholder = st.empty()
+            for chunk in response:
+                full_response += chunk
+                time.sleep(0.01) # Small delay for effect
+                message_placeholder.markdown(full_response + "▌")
+            message_placeholder.markdown(full_response)
+
+    # Store the AI's full response
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
