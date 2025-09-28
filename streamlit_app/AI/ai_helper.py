@@ -133,4 +133,3 @@ SCORE_CANDIDATES = [
     "Final_Score_0_100", "Final_Blended_0_100", "Final_Log_0_100",
     "Final_PerCap_0_100", "Final_DomainAvg_0_100"
 ]
-
