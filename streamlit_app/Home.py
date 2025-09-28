@@ -127,6 +127,18 @@ selected_regions = regions_list if global_on else st.sidebar.multiselect(
 )
 df = final_df[final_df[COL_REGION].isin(selected_regions)].copy()
 
+
+# --- NEW: Country filter moved to the sidebar ---
+# The logic for finding top countries is now here, based on the filtered df
+top_countries = df.sort_values(score_to_show, ascending=False)[COL_COUNTRY].head(3).tolist()
+
+# The multiselect widget is now in the sidebar
+comparison_countries = st.sidebar.multiselect(
+    "Select Countries", # Label updated as requested
+    options=sorted(df[COL_COUNTRY].unique().tolist()),
+    default=top_countries, max_selections=5, key="country_comparator"
+)
+
 # --- Page Title ---
 st.title("Ecosystem Maturity Index")
 
@@ -142,7 +154,16 @@ with col1:
     if rank.empty:
         st.info("No countries to display. Adjust filters.")
     else:
-        fig = px.bar(rank, x=COL_COUNTRY, y=score_to_show, color_discrete_sequence=['#054b81'])
+        # --- UPDATED: Add a column for highlighting and apply new colors ---
+        rank['Highlight'] = np.where(rank[COL_COUNTRY].isin(comparison_countries), 'Selected', 'Other')
+        fig = px.bar(
+            rank, x=COL_COUNTRY, y=score_to_show,
+            color='Highlight',
+            color_discrete_map={
+                'Selected': '#ff7433', # New highlight color
+                'Other': '#054b81'      # Original color for other bars
+            }
+        )
         n = len(rank)
         
         # --- THIS LOGIC IS NOW UPDATED ---
@@ -242,12 +263,6 @@ st.divider()
 
 # --- UNIFIED DEEP-DIVE SECTION (No changes here) ---
 st.subheader("Country Comparison Deep-Dive")
-top_countries = df.sort_values(score_to_show, ascending=False)[COL_COUNTRY].head(3).tolist()
-comparison_countries = st.multiselect(
-    "Select up to 5 countries to compare:",
-    options=sorted(df[COL_COUNTRY].unique().tolist()),
-    default=top_countries, max_selections=5, key="country_comparator"
-)
 # --- Radar Chart ---
 st.markdown("##### Domain Profile (Radar)")
 domain_cols = [c for c in final_df.columns if c.startswith("DOMAIN_SCORE__")]
