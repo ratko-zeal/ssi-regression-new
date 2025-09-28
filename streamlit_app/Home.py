@@ -157,12 +157,17 @@ with col1:
         # --- UPDATED: Add a column for highlighting and apply new colors ---
         rank['Highlight'] = np.where(rank[COL_COUNTRY].isin(comparison_countries), 'Selected', 'Other')
         fig = px.bar(
-            rank, x=COL_COUNTRY, y=score_to_show,
+            rank, 
+            x=COL_COUNTRY, 
+            y=score_to_show,
             color='Highlight',
             color_discrete_map={
                 'Selected': '#ff7433', # New highlight color
                 'Other': '#054b81'      # Original color for other bars
-            }
+            },
+            # --- THIS IS THE FIX ---
+            # Enforce the original sort order of the countries
+            category_orders={COL_COUNTRY: rank[COL_COUNTRY].tolist()}
         )
         n = len(rank)
         
