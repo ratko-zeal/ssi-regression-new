@@ -400,3 +400,17 @@ if prompt := st.chat_input("Ask about the maturity index..."):
             st.error("OpenAI API key not found. Please add it to your Streamlit secrets to enable the AI assistant.")
             st.stop()
 
+# --- Powered By Logos ---
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("##### Powered by")
+
+# Create two columns in the sidebar
+col1, col2 = st.sidebar.columns(2)
+
+# Display logos in their respective columns
+with col1:
+    st.image("logos/Seedstars - Logo.png", use_column_width=True)
+
+with col2:
+    st.image("logos/ANDE - Logo.png", use_column_width=True)
