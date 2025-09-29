@@ -142,15 +142,11 @@ if st.session_state.initial_load_complete:
     region_has_changed = (st.session_state.last_selected_regions != selected_regions)
     if region_has_changed:
         # If countries were already selected, filter them to what's available
-        if st.session_state.comparison_countries:
-            new_selection = [
-                c for c in st.session_state.comparison_countries if c in available_countries
-            ]
-            st.session_state.comparison_countries = new_selection
-        # If no countries were selected, THEN pre-select the top 3 for the new region
-        else:
-            top_countries = df.sort_values(score_to_show, ascending=False)[COL_COUNTRY].head(3).tolist()
-            st.session_state.comparison_countries = top_countries
+        # If the list is empty, this condition is false and nothing happens.
+        new_selection = [
+            c for c in st.session_state.comparison_countries if c in available_countries
+        ]
+        st.session_state.comparison_countries = new_selection
 
 # Display the country multiselect widget
 comparison_countries = st.sidebar.multiselect(
