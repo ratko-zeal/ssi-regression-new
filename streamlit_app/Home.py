@@ -310,7 +310,7 @@ else:
             # Update the trace with the new marker line properties
             trace.marker.line.color = line_colors
             trace.marker.line.width = line_widths
-            trace.marker.opacity = 0.8 # Apply a consistent transparency to all bubbles
+            trace.marker.opacity = 0.6 # Apply a consistent transparency to all bubbles
 
 
         fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="Maturity")
