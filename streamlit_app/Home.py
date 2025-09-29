@@ -231,9 +231,8 @@ with col1:
         fig.update_layout(xaxis_title=None, yaxis_title=score_to_show.replace("_", " "),
                           margin=dict(l=0, r=0, t=30, b=0), showlegend=False)
 
-        # --- NEW: Create a list of colors for the x-axis labels ---
-        tick_colors = ['#ff7433' if country in comparison_countries else 'black' for country in rank[COL_COUNTRY]]
-        fig.update_xaxes(tickangle=-75, tickfont=dict(color=tick_colors))
+        # The tickfont color cannot be set individually, so we remove the line causing the error.
+        fig.update_xaxes(tickangle=-75)
 
         st.plotly_chart(fig, use_container_width=True)
 
@@ -303,10 +302,6 @@ else:
             # Set border width: 2 for selected countries, 1 for others (2x thicker)
             line_widths = [2 if c in comparison_countries else 1 for c in countries_in_trace]
 
-            # --- NEW: Create a list of opacities: higher for selected, default for others ---
-            # Default Plotly opacity is usually around 0.7-0.8 for scatter, let's make selected fully opaque.
-            opacities = [1.0 if c in comparison_countries else 0.7 for c in countries_in_trace] # 0.7 is a good general default           
-
             # Update the trace with the new marker line properties
             trace.marker.line.color = line_colors
             trace.marker.line.width = line_widths
@@ -329,8 +324,7 @@ else:
 
         # This is where you would display the chart
         st.plotly_chart(fig_sc, use_container_width=True)
-        
-        st.plotly_chart(fig_sc, use_container_width=True)
+    
 
 st.divider()
 
