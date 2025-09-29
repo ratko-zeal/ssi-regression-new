@@ -289,30 +289,25 @@ else:
             fig_sc.add_vrect(x0=55, x1=max_score, fillcolor="#ff7433", opacity=0.2, line_width=0, layer="below")
 
         # --- NEW: Loop through chart data to apply conditional highlighting ---
-        # This approach preserves the color-by-maturity while highlighting selections.
-        highlight_color = '#ff5533'        
+        # This approach preserves the color-by-maturity while highlighting selections.    
         for trace in fig_sc.data:
             # Get the country names for the points in the current trace (e.g., all 'Mature' countries)
             countries_in_trace = trace.hovertext
-            # Get the original color for this trace (e.g., the color for 'Mature')
+            # Get the original fill color for this trace (e.g., the color for 'Mature')
             original_color = maturity_color_map[trace.name]
 
-            # --- THIS IS THE NEW PART ---
-            # Create a list of fill colors: highlight color for selected, original for others
-            fill_colors = [highlight_color if c in comparison_countries else original_color for c in countries_in_trace]
+            # --- UPDATED LOGIC ---
+            # Create a list of border colors: black for selected, or the original color for others
+            line_colors = ['black' if c in comparison_countries else original_color for c in countries_in_trace]
 
-            # Create a list of border colors: highlight color for selected, black for others
-            line_colors = [highlight_color if c in comparison_countries else 'black' for c in countries_in_trace]
-
-            # Create a list of border widths: thicker for selected, standard for others
-            line_widths = [3 if c in comparison_countries else 0.5 for c in countries_in_trace]
+            # Set border width: 2 for selected countries, 1 for others (2x thicker)
+            line_widths = [2 if c in comparison_countries else 1 for c in countries_in_trace]
 
             # --- NEW: Create a list of opacities: higher for selected, default for others ---
             # Default Plotly opacity is usually around 0.7-0.8 for scatter, let's make selected fully opaque.
             opacities = [1.0 if c in comparison_countries else 0.7 for c in countries_in_trace] # 0.7 is a good general default           
 
             # Update the trace with the new marker line properties
-            trace.marker.color = fill_colors
             trace.marker.line.color = line_colors
             trace.marker.line.width = line_widths
             trace.marker.opacity = opacities # Apply the opacities here
