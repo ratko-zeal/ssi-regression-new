@@ -286,7 +286,22 @@ else:
             fig_sc.add_vrect(x0=20, x1=55, fillcolor="#59b0F2", opacity=0.2, line_width=0, layer="below")
             fig_sc.add_vrect(x0=55, x1=max_score, fillcolor="#ff7433", opacity=0.2, line_width=0, layer="below")
 
-        fig_sc.update_traces(marker_line_width=0.5, marker_line_color='black')
+        # --- NEW: Loop through chart data to apply conditional highlighting ---
+        # This approach preserves the color-by-maturity while highlighting selections.
+        for trace in fig_sc.data:
+            # Get the country names for the points in the current trace (e.g., all 'Mature' countries)
+            countries_in_trace = trace.hovertext
+
+            # Create a list of border colors: highlight color for selected, black for others
+            line_colors = ['#ff5533' if c in comparison_countries else 'black' for c in countries_in_trace]
+
+            # Create a list of border widths: thicker for selected, standard for others
+            line_widths = [3 if c in comparison_countries else 0.5 for c in countries_in_trace]
+
+            # Update the trace with the new marker line properties
+            trace.marker.line.color = line_colors
+            trace.marker.line.width = line_widths
+
         fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="Maturity")
         st.plotly_chart(fig_sc, use_container_width=True)
 
