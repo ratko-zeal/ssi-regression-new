@@ -307,22 +307,24 @@ else:
             trace.marker.line.width = line_widths
             trace.marker.opacity = 0.6 # Apply a consistent transparency to all bubbles
 
+        # --- UPDATED: Custom Legend Logic ---
+        # 1. Hide the original 'Maturity' legend items
+        for trace in fig_sc.data:
+            trace.showlegend = False
 
-        fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="Maturity")
-        
-        # --- ADD THIS CODE right before st.plotly_chart(fig_sc, ...) ---
+        # 2. Add invisible traces for each selected country to build the new legend
 
-        # Check if any countries are selected
         if comparison_countries:
-            # Create a nicely formatted string of the selected countries
-            selected_countries_str = ", ".join(f"<b>{c}</b>" for c in comparison_countries)
-            # Display the list using st.markdown
-            st.markdown(f"**Highlighted Countries:** {selected_countries_str}", unsafe_allow_html=True)
-        else:
-            # Show a default message if no countries are selected
-            st.caption("Select countries in the sidebar to highlight them.")
+            for country in comparison_countries:
+                fig_sc.add_trace(go.Scatter(
+                    x=[None], y=[None], # No actual data points
+                    mode='markers',
+                    marker=dict(size=10, color='#ff5533'), # Style for the legend marker
+                    name=country, # This text appears in the legend
+                    showlegend=True
+                ))
 
-        # This is where you would display the chart
+        fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="Selected Countries")
         st.plotly_chart(fig_sc, use_container_width=True)
     
 
@@ -424,23 +426,16 @@ st.subheader("Global Perspective")
 map_df = final_df.copy()
 
 # 2. Create the expanded "Map Category" column for multi-level coloring
-# This logic now prioritizes "Selected", then separates "Other", and finally uses "Maturity"
-conditions = [
-    map_df[COL_COUNTRY].isin(comparison_countries), # Highest priority: Is the country specifically selected?
-    ~map_df[COL_REGION].isin(selected_regions)   # Next: Is the country outside the selected region?
-]
-choices = [
-    "Selected", # Assign to selected countries
-    "Other"     # Assign to countries not in the filtered region
-]
-# The default choice will be the country's actual maturity level
-map_df["Map Category"] = np.select(conditions, choices, default=map_df['Maturity'])
+# The logic now only separates 'Other' countries, otherwise it uses the Maturity level
+map_df["Map Category"] = np.where(
+    ~map_df[COL_REGION].isin(selected_regions),
+    "Other",
+    map_df['Maturity']
+)
 
 
 # 3. Define the new, expanded color scheme
 color_map = {
-    # Specific highlight for selected countries
-    "Selected": "#FFD700",  # A distinct gold color
 
     # Maturity colors (consistent with other charts)
     'Mature': '#ff7433',
