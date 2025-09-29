@@ -319,7 +319,7 @@ else:
                 fig_sc.add_trace(go.Scatter(
                     x=[None], y=[None], # No actual data points
                     mode='markers',
-                    marker=dict(size=10, color='#ff5533'), # Style for the legend marker
+                    marker=dict(size=10, color='black'), # Style for the legend marker
                     name=country, # This text appears in the legend
                     showlegend=True
                 ))
