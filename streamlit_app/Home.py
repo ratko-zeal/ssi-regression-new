@@ -456,6 +456,76 @@ if prompt := st.chat_input("Ask about the maturity index..."):
             st.error("OpenAI API key not found. Please add it to your Streamlit secrets to enable the AI assistant.")
             st.stop()
 
+# --- World Map Visualization ---
+st.subheader("Global Perspective")
+
+# 1. Prepare the data for the map
+map_df = final_df.copy()
+
+# 2. Create the expanded "Map Category" column for multi-level coloring
+# This logic now prioritizes "Selected", then separates "Other", and finally uses "Maturity"
+conditions = [
+    map_df[COL_COUNTRY].isin(comparison_countries), # Highest priority: Is the country specifically selected?
+    ~map_df[COL_REGION].isin(selected_regions)   # Next: Is the country outside the selected region?
+]
+choices = [
+    "Selected", # Assign to selected countries
+    "Other"     # Assign to countries not in the filtered region
+]
+# The default choice will be the country's actual maturity level
+map_df["Map Category"] = np.select(conditions, choices, default=map_df['Maturity'])
+
+
+# 3. Define the new, expanded color scheme
+color_map = {
+    # Specific highlight for selected countries
+    "Selected": "#FFD700",  # A distinct gold color
+
+    # Maturity colors (consistent with other charts)
+    'Mature': '#ff7433',
+    'Advancing': '#59b0F2',
+    'Nascent': '#0865AC',
+
+    # Neutral color for all other countries
+    "Other": "#d4d4d8"
+}
+
+# 4. Create the choropleth map with the new coloring
+fig_map = px.choropleth(
+    map_df,
+    locations=COL_COUNTRY,
+    locationmode='country names',
+    color="Map Category",          # Color countries based on our new 5-level category
+    color_discrete_map=color_map,
+    hover_name=COL_COUNTRY,
+    hover_data={
+        "Map Category": False,
+        COL_COUNTRY: False,
+        score_to_show: ':.0f'
+    }
+)
+
+# 5. Style the map layout
+fig_map.update_layout(
+    margin={"r":0,"t":0,"l":0,"b":0},
+    legend_title_text='Status / Maturity', # Updated legend title
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=0.01,
+        xanchor="left",
+        x=0.01
+    ),
+    geo=dict(
+        bgcolor='rgba(0,0,0,0)',
+        showframe=False,
+        showcoastlines=False,
+        projection_type='natural earth'
+    )
+)
+
+# 6. Display the map in your Streamlit app
+st.plotly_chart(fig_map, use_container_width=True)
 
 ## --- Powered By Logos ---
 st.sidebar.markdown("---")
