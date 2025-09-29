@@ -272,9 +272,11 @@ else:
         bubble_df["_size"] = np.sqrt(bubble_df[hg_col].clip(lower=1))
         bubble_df["_x_log"] = bubble_df[score_to_show] + 0.1
 
+        maturity_color_map = {'Mature': '#ff7433', 'Advancing': '#59b0F2', 'Nascent': '#0865AC'}      
+
         fig_sc = px.scatter(
             bubble_df, x="_x_log", y=hg_col, size="_size", color="Maturity",
-            color_discrete_map={'Mature': '#ff7433', 'Advancing': '#59b0F2', 'Nascent': '#0865AC'},
+            color_discrete_map=maturity_color_map,
             hover_name=COL_COUNTRY, size_max=60, log_x=True, log_y=True,
             labels={"_x_log": "Index Score (Log Scale)", hg_col: "High Growth Companies (Log Scale)"}
         )
@@ -288,17 +290,25 @@ else:
 
         # --- NEW: Loop through chart data to apply conditional highlighting ---
         # This approach preserves the color-by-maturity while highlighting selections.
+        highlight_color = '#ff5533'        
         for trace in fig_sc.data:
             # Get the country names for the points in the current trace (e.g., all 'Mature' countries)
             countries_in_trace = trace.hovertext
+            # Get the original color for this trace (e.g., the color for 'Mature')
+            original_color = maturity_color_map[trace.name]
+
+            # --- THIS IS THE NEW PART ---
+            # Create a list of fill colors: highlight color for selected, original for others
+            fill_colors = [highlight_color if c in comparison_countries else original_color for c in countries_in_trace]
 
             # Create a list of border colors: highlight color for selected, black for others
-            line_colors = ['#ff5533' if c in comparison_countries else 'black' for c in countries_in_trace]
+            line_colors = [highlight_color if c in comparison_countries else 'black' for c in countries_in_trace]
 
             # Create a list of border widths: thicker for selected, standard for others
             line_widths = [3 if c in comparison_countries else 0.5 for c in countries_in_trace]
 
             # Update the trace with the new marker line properties
+            trace.marker.color = fill_colors
             trace.marker.line.color = line_colors
             trace.marker.line.width = line_widths
 
