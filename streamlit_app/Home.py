@@ -307,10 +307,15 @@ else:
             # Create a list of border widths: thicker for selected, standard for others
             line_widths = [3 if c in comparison_countries else 0.5 for c in countries_in_trace]
 
+            # --- NEW: Create a list of opacities: higher for selected, default for others ---
+            # Default Plotly opacity is usually around 0.7-0.8 for scatter, let's make selected fully opaque.
+            opacities = [1.0 if c in comparison_countries else 0.7 for c in countries_in_trace] # 0.7 is a good general default           
+
             # Update the trace with the new marker line properties
             trace.marker.color = fill_colors
             trace.marker.line.color = line_colors
             trace.marker.line.width = line_widths
+            trace.marker.opacity = opacities # Apply the opacities here
 
         fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="Maturity")
         st.plotly_chart(fig_sc, use_container_width=True)
