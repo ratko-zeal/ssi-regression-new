@@ -230,7 +230,11 @@ with col1:
         
         fig.update_layout(xaxis_title=None, yaxis_title=score_to_show.replace("_", " "),
                           margin=dict(l=0, r=0, t=30, b=0), showlegend=False)
-        fig.update_xaxes(tickangle=-75)
+
+        # --- NEW: Create a list of colors for the x-axis labels ---
+        tick_colors = ['#ff7433' if country in comparison_countries else 'black' for country in rank[COL_COUNTRY]]
+        fig.update_xaxes(tickangle=-75, tickfont=dict(color=tick_colors))
+
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
@@ -310,6 +314,22 @@ else:
 
 
         fig_sc.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend_title_text="Maturity")
+        
+        # --- ADD THIS CODE right before st.plotly_chart(fig_sc, ...) ---
+
+        # Check if any countries are selected
+        if comparison_countries:
+            # Create a nicely formatted string of the selected countries
+            selected_countries_str = ", ".join(f"<b>{c}</b>" for c in comparison_countries)
+            # Display the list using st.markdown
+            st.markdown(f"**Highlighted Countries:** {selected_countries_str}", unsafe_allow_html=True)
+        else:
+            # Show a default message if no countries are selected
+            st.caption("Select countries in the sidebar to highlight them.")
+
+        # This is where you would display the chart
+        st.plotly_chart(fig_sc, use_container_width=True)
+        
         st.plotly_chart(fig_sc, use_container_width=True)
 
 st.divider()
@@ -470,6 +490,23 @@ fig_map.update_layout(
         projection_type='natural earth'
     )
 )
+
+# --- NEW: Loop through the map data to add a border highlight ---
+for trace in fig_map.data:
+    # Get the country names for the shapes in this trace
+    countries_in_trace = trace.locations
+
+    # Create a list of border colors: black for selected, transparent for others
+    # We use the trace's own color for non-selected borders to make them blend in
+    border_colors = ['black' if c in comparison_countries else 'rgba(0,0,0,0)' for c in countries_in_trace]
+
+    # Create a list of border widths: thick for selected, thin for others
+    border_widths = [2 if c in comparison_countries else 0.5 for c in countries_in_trace]
+
+    # Update the trace with the new marker line properties
+    trace.marker.line.color = border_colors
+    trace.marker.line.width = border_widths
+
 
 # 6. Display the map in your Streamlit app
 st.plotly_chart(fig_map, use_container_width=True)
