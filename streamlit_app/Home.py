@@ -120,24 +120,50 @@ COMPARISON_COLORS = ["#054b81", "#FF7433", "#59b0F2", "#29A0B1", "#686868"]
 
 # --- Sidebar ---
 st.sidebar.header("Filters")
+
+# 1. Initialize session state for the filter logic
+if 'initial_load_complete' not in st.session_state:
+    st.session_state.initial_load_complete = False
+    st.session_state.last_selected_regions = []
+    st.session_state.comparison_countries = [] # Start with an empty selection
+
+# --- Region Filter ---
 regions_list = sorted(final_df[COL_REGION].dropna().unique().tolist())
 global_on = st.sidebar.checkbox("Global View", value=True)
 selected_regions = regions_list if global_on else st.sidebar.multiselect(
     "Select Regions", regions_list, default=regions_list
 )
 df = final_df[final_df[COL_REGION].isin(selected_regions)].copy()
+available_countries = sorted(df[COL_COUNTRY].unique().tolist())
 
+# --- Country Filter Logic ---
+# This logic now runs only AFTER the initial page load
+if st.session_state.initial_load_complete:
+    region_has_changed = (st.session_state.last_selected_regions != selected_regions)
+    if region_has_changed:
+        # If countries were already selected, filter them to what's available
+        if st.session_state.comparison_countries:
+            new_selection = [
+                c for c in st.session_state.comparison_countries if c in available_countries
+            ]
+            st.session_state.comparison_countries = new_selection
+        # If no countries were selected, THEN pre-select the top 3 for the new region
+        else:
+            top_countries = df.sort_values(score_to_show, ascending=False)[COL_COUNTRY].head(3).tolist()
+            st.session_state.comparison_countries = top_countries
 
-# --- NEW: Country filter moved to the sidebar ---
-# The logic for finding top countries is now here, based on the filtered df
-top_countries = df.sort_values(score_to_show, ascending=False)[COL_COUNTRY].head(3).tolist()
-
-# The multiselect widget is now in the sidebar
+# Display the country multiselect widget
 comparison_countries = st.sidebar.multiselect(
-    "Select Countries", # Label updated as requested
-    options=sorted(df[COL_COUNTRY].unique().tolist()),
-    default=top_countries, max_selections=5, key="country_comparator"
+    "Select Countries",
+    options=available_countries,
+    default=st.session_state.comparison_countries,
+    key="country_comparator"
 )
+
+# Update session state for the next run
+st.session_state.comparison_countries = comparison_countries
+st.session_state.last_selected_regions = selected_regions
+st.session_state.initial_load_complete = True
 
 # --- Page Title ---
 st.title("Ecosystem Maturity Index")
@@ -400,42 +426,28 @@ if prompt := st.chat_input("Ask about the maturity index..."):
             st.error("OpenAI API key not found. Please add it to your Streamlit secrets to enable the AI assistant.")
             st.stop()
 
+
+## --- Powered By Logos ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("##### Powered by")
+
+script_dir = Path(__file__).resolve().parent
+
+# Display a single, centered logo directly in the sidebar
+st.sidebar.image(
+    # 👈 Change this filename if you want to use the other logo
+    str(script_dir / "logos" / "Seedstars - Logo.png"),
+    use_container_width=True
+)
+
 # --- CTA Section ---
 # This creates a visual separator from the filters above
 st.sidebar.markdown("---")
 
-# Title of the CTA
-st.sidebar.markdown("#### Global Ecosystem Data")
-
 # Body text of the CTA
 st.sidebar.markdown(
-    "Explore a global database of ecosystem support organizations."
+    "Explore entrepreneurial ecosystems mapping from ANDE"
 )
 
 # The actual button that links to your page
 st.sidebar.link_button("View the Ecosystem Maps", "https://andeglobal.org/ecosystem-maps/") # 👈 Replace with your URL
-
-
-# --- Powered By Logos ---
-
-# Get the absolute path to the current script's directory
-script_dir = Path(__file__).resolve().parent
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("##### Powered by")
-
-# Create two columns in the sidebar
-col1, col2 = st.sidebar.columns(2)
-
-# Display logos using the full, reliable path
-with col1:
-    st.image(
-        str(script_dir / "logos" / "Seedstars - Logo.png"),
-        use_container_width=True # Use the new parameter name
-    )
-
-with col2:
-    st.image(
-        str(script_dir / "logos" / "ANDE - Logo.png"),
-        use_container_width=True # Use the new parameter name
-    )
