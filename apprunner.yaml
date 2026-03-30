@@ -4,12 +4,18 @@ runtime: python311
 build:
   commands:
     build:
-      - echo "Build stage"
+      - echo "No build-time pip install for Python 3.11 App Runner revised build"
 
 run:
   runtime-version: 3.11
   pre-run:
     - pip3 install -r requirements.txt
-  command: python3 -m streamlit run streamlit_app/Home.py --server.port 8080 --server.address 0.0.0.0 --server.headless true
+  command: >-
+    python3 -m streamlit run streamlit_app/Home.py
+    --server.port=8080
+    --server.address=0.0.0.0
+    --server.headless=true
+    --server.enableCORS=false
+    --server.enableWebsocketCompression=false
   network:
     port: 8080
