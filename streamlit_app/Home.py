@@ -518,8 +518,8 @@ if prompt := st.chat_input("Ask about the maturity index..."):
     with st.chat_message("assistant"):
         # --- THIS BLOCK IS UPDATED ---
         # 1. Check if the secret is available
-        if "openai" in st.secrets and "api_key" in st.secrets.openai:
-            api_key = st.secrets.openai.api_key
+        if "anthropic" in st.secrets and "api_key" in st.secrets.anthropic:
+            api_key = st.secrets.anthropic.api_key
             
             # 2. Create a placeholder for the "Thinking..." message
             placeholder = st.empty()
@@ -542,7 +542,7 @@ if prompt := st.chat_input("Ask about the maturity index..."):
             st.session_state.messages.append({"role": "assistant", "content": full_response})
         else:
             # Show an error if the key is not found
-            st.error("OpenAI API key not found. Please add it to your Streamlit secrets to enable the AI assistant.")
+            st.error("Anthropic API key not found. Please add it to your Streamlit secrets to enable the AI assistant.")
             st.stop()
 
 ## --- Powered By Logos ---

@@ -1,10 +1,11 @@
 import pandas as pd
 import re
-from openai import OpenAI
+import anthropic
 
 # --- CONFIGURATION ---
-# Migrate to the new, recommended model and API structure
-MODEL_NAME = "gpt-5" 
+MODEL_NAME = "claude-opus-5-5"
+EFFORT = "medium"  # low | medium | high | xhigh | max
+MAX_CONTINUATIONS = 5  # resumes when a web-search turn pauses (stop_reason "pause_turn")
 
 # --- SYSTEM PROMPT (now called instructions) ---
 # This defines the AI's persona, rules, and workflow.
@@ -81,9 +82,9 @@ Inform Policy and Investment: Offer data-driven evidence to guide government pol
 
 def get_ai_response(prompt: str, api_key: str, final_df: pd.DataFrame, ind_df: pd.DataFrame, dom_map: pd.DataFrame, chat_history: list):
     """
-    Retrieves data, constructs a prompt, and gets a response from the new OpenAI Responses API.
+    Retrieves data, constructs a prompt, and streams a response from the Claude Messages API.
     """
-    client = OpenAI(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key)
 
     # --- 1. Simple Entity Extraction: Find countries mentioned ---
     all_countries = final_df['COUNTRY'].unique().tolist()
@@ -130,50 +131,62 @@ def get_ai_response(prompt: str, api_key: str, final_df: pd.DataFrame, ind_df: p
                             for indicator, score in weakest_indicators.items():
                                 data_dump += f"  - {indicator}: {score:.1f}\n"
 
-    # --- 3. Construct the context for the API call ---
-    # The new API takes a simpler list of context items.
-    context = []
-    # Add previous messages for context (short-term memory)
-    # The new API handles this differently, but we can pass the message history as input
-    context.extend(chat_history[-4:])
+    # --- 3. Construct the conversation for the API call ---
+    # Short-term memory: the last few turns before the current prompt (Home.py has
+    # already appended the current prompt to chat_history, so leave it out here).
+    history = chat_history[:-1] if last_user_prompt == prompt else chat_history
+    history = history[-4:]
+    # The Messages API requires the conversation to start with a user turn.
+    while history and history[0]['role'] != 'user':
+        history = history[1:]
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    messages.append({"role": "user", "content": prompt + data_dump})
 
-    # Add the user's current prompt with the data dump
-    full_prompt_with_data = prompt + data_dump
-    context.append({"role": "user", "content": full_prompt_with_data})
-
-
-    # --- 4. Call the new OpenAI Responses API ---
+    # --- 4. Call the Claude Messages API (streaming) ---
     try:
-        # --- MODIFICATION ---
-        # Instead of iterating through a stream, we make a single API call
-        # and directly access the final text, as shown in the new API's documentation.
-        # This resolves the "'tuple' object has no attribute 'type'" error.
-        response = client.responses.create(
-            model=MODEL_NAME,
-            instructions=INSTRUCTIONS,
-            input=context,
-            # Let's add the native web_search tool as requested in the vision!
-            tools=[{"type": "web_search"}]
-        )
+        produced_text = False
+        for _ in range(MAX_CONTINUATIONS + 1):
+            with client.beta.messages.stream(
+                model=MODEL_NAME,
+                max_tokens=16000,
+                system=INSTRUCTIONS,
+                messages=messages,
+                tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}],
+                output_config={"effort": EFFORT},
+                # On a safety decline, re-run the request on a fallback model chosen by the API.
+                betas=["server-side-fallback-2026-07-01"],
+                fallbacks="default",
+            ) as stream:
+                for text in stream.text_stream:
+                    produced_text = True
+                    yield text
+                final = stream.get_final_message()
 
-        # The documentation shows the final text is available in the 'output_text' attribute.
-        # We yield this single complete response. Streamlit's write_stream can handle this.
-        if hasattr(response, 'output_text') and response.output_text:
-            yield response.output_text
+            if final.stop_reason == "pause_turn":
+                # The server-side web search loop paused; send the turn back to resume it.
+                messages.append({"role": "assistant", "content": final.content})
+                continue
+            if final.stop_reason == "refusal":
+                yield "Sorry, I can't help with that request."
+            elif not produced_text:
+                yield "Sorry, I could not generate a valid response. Please try again."
+            break
+
+    except anthropic.AuthenticationError:
+        yield "Error: The provided Anthropic API key is incorrect. Please check and try again."
+    except anthropic.PermissionDeniedError:
+        yield "Error: The Anthropic API key does not have access to this model."
+    except anthropic.RateLimitError:
+        yield "Error: The AI assistant is busy (rate limited). Please try again in a minute."
+    except anthropic.BadRequestError as e:
+        if "credit balance" in str(e.message).lower():
+            yield "Error: The Anthropic account is out of credits. Please check billing."
         else:
-            # Provide a fallback message if the expected text is not found.
-            yield "Sorry, I could not generate a valid response. The API might be busy or the response format was unexpected."
-
-
-    except Exception as e:
-        # Attempt to provide a more user-friendly error message
-        error_message = str(e)
-        if "Incorrect API key" in error_message:
-            yield "Error: The provided OpenAI API key is incorrect. Please check and try again."
-        elif "You exceeded your current quota" in error_message:
-            yield "Error: You have exceeded your OpenAI API quota. Please check your account usage."
-        else:
-            yield f"An error occurred: {error_message}"
+            yield f"An error occurred: {e.message}"
+    except anthropic.APIStatusError as e:
+        yield f"An error occurred (status {e.status_code}). Please try again later."
+    except anthropic.APIConnectionError:
+        yield "Error: Could not reach the AI service. Please try again."
 
 
 # --- Constants used in the helper ---
